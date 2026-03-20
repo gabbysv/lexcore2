@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Dashboard — LexCore</title>
+  <link rel="stylesheet" href="../css/main.css" />
+</head>
+<body class="auth-loading">
+  <div class="page-wrapper">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+      <div style="margin-bottom:40px; display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <h1 id="greeting">Good morning</h1>
+          <p>Here's the status of your case and recent activity.</p>
+        </div>
+        <button
+          id="signout-btn"
+          style="padding:10px 20px; background:#1C3D5A; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:0.9rem; font-family:inherit; flex-shrink:0;">
+          Sign Out
+        </button>
+      </div>
+      <div class="card" style="margin-bottom:24px;">
+        <div class="card-header"><h3>Your Case</h3></div>
+        <div id="case-info"><p style="text-align:center;color:#9B9791;padding:24px;">Loading...</p></div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <h3>Recent Messages</h3>
+          <a href="messages.html" class="btn btn-secondary btn-sm">View all</a>
+        </div>
+        <div id="messages-preview"><p style="text-align:center;color:#9B9791;padding:24px;">Loading...</p></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://hwsokdbbjjtiwscldbpr.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3c29rZGJiamp0aXdzY2xkYnByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTAzOTgsImV4cCI6MjA4OTA4NjM5OH0.PV-f9KCQzlPm5stTxFOSN4sVJDRKqZnqKnFZ6qHWECk';
+    const { createClient } = supabase;
+    const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    async function signOut() {
+      await client.auth.signOut();
+      window.location.replace('/index.html');
+    }
+
+    document.getElementById('signout-btn').addEventListener('click', signOut);
+
+    async function init() {
+      const { data: { session } } = await client.auth.getSession();
+      if (!session) { window.location.replace('/index.html'); return; }
+
+      const { data: profile } = await client.from('profiles').select('*').eq('id', session.user.id).single();
+      if (!profile || profile.role !== 'client') { window.location.replace('/index.html'); return; }
+
+      document.body.classList.remove('auth-loading');
+
+      const hour = new Date().getHours();
+      document.getElementById('greeting').textContent = `${hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'}, ${profile.full_name?.split(' ')[0] || ''}`;
+
+      document.getElementById('sidebar-container').innerHTML = `
+        <aside class="sidebar">
+          <div class="sidebar-logo">LexCore<span>${profile.firm_name || 'Law Firm'}</span></div>
+          <nav class="sidebar-nav">
+            <a href="dashboard-client.html" class="active">⊞ Dashboard</a>
+            <a href="cases.html">⊟ My Case</a>
+            <a href="documents.html">⊡ Documents</a>
+            <a href="messages.html">◷ Messages</a>
+          </nav>
+          <div class="sidebar-footer">
+            <strong>${profile.full_name || 'Client'}</strong>
+            <span class="badge badge-client" style="margin-top:6px;">client</span>
+            <br/><br/>
+            <button id="sidebar-signout" class="btn btn-secondary btn-sm" style="width:100%;margin-top:8px;">Sign out</button>
+          </div>
+        </aside>`;
+
+      document.getElementById('sidebar-signout').addEventListener('click', signOut);
+
+      const { data: cases } = await client
+        .from('cases')
+        .select('*,attorney:profiles!cases_attorney_id_fkey(full_name,email)')
+        .eq('client_id', profile.id)
+        .order('created_at', { ascending: false });
+
+      const caseInfoEl = document.getElementById('case-info');
+      if (!cases?.length) {
+        caseInfoEl.innerHTML = '<p style="color:#9B9791;padding:16px;">No case found. Your attorney will set this up for you.</p>';
+      } else {
+        caseInfoEl.innerHTML = cases.map(c => `
+          <div style="padding:8px 0;border-bottom:1px solid #E2DDD8;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <strong>${c.title}</strong>
+              <span class="badge badge-${c.status === 'active' ? 'success' : 'warning'}">${c.status}</span>
+            </div>
+            <p style="margin-top:4px;font-size:0.875rem;">Your attorney: <strong>${c.attorney?.full_name || '—'}</strong></p>
+            <p style="font-size:0.8rem;color:#9B9791;margin-top:2px;">Opened ${new Date(c.created_at).toLocaleDateString()}</p>
+          </div>`).join('');
+      }
+
+      if (cases?.length) {
+        const { data: messages } = await client
+          .from('messages')
+          .select('*,sender:profiles!messages_sender_id_fkey(full_name,role)')
+          .eq('case_id', cases[0].id)
+          .order('sent_at', { ascending: false })
+          .limit(3);
+
+        const msgEl = document.getElementById('messages-preview');
+        if (!messages?.length) {
+          msgEl.innerHTML = '<p style="text-align:center;color:#9B9791;padding:24px;">No messages yet.</p>';
+        } else {
+          msgEl.innerHTML = messages.map(m => `
+            <div style="padding:8px 16px;border-bottom:1px solid #E2DDD8;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+                <strong style="font-size:0.875rem;">${m.sender?.full_name || 'Unknown'}</strong>
+                <span class="badge badge-${m.sender?.role}">${m.sender?.role}</span>
+              </div>
+              <p style="font-size:0.875rem;margin:0;color:#6B6760;">${m.content}</p>
+              <p style="font-size:0.75rem;color:#9B9791;margin-top:2px;">${new Date(m.sent_at).toLocaleString()}</p>
+            </div>`).join('');
+        }
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

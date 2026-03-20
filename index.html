@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LexCore — Legal Practice Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root { --ink: #0E1A14; --ink-mid: #3A4A41; --ink-soft: #6B7D72; --ink-faint: #A8B8AF; --paper: #F5F2EC; --paper-card: #FAFAF7; --gold: #B8975A; --gold-light: #D4B47A; --gold-faint: #F2ECD9; --green-deep: #1A3328; --green-mid: #2D5445; --green-soft: #E8F0EC; --border: rgba(14,26,20,0.10); --border-mid: rgba(14,26,20,0.18); --ff-display: 'Cormorant Garamond', Georgia, serif; --ff-body: 'Outfit', system-ui, sans-serif; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+    body { font-family: var(--ff-body); background: var(--paper); color: var(--ink); min-height: 100vh; overflow-x: hidden; }
+    .shell { display: grid; grid-template-columns: 1fr 440px; min-height: 100vh; }
+    .left { position: relative; background: var(--green-deep); display: flex; flex-direction: column; padding: 48px 56px; overflow: hidden; }
+    .left::before { content: ''; position: absolute; top: -120px; right: -120px; width: 500px; height: 500px; border-radius: 50%; background: radial-gradient(circle, rgba(184,151,90,0.12) 0%, transparent 70%); pointer-events: none; }
+    .left-texture { position: absolute; inset: 0; background-image: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.025) 39px, rgba(255,255,255,0.025) 40px); pointer-events: none; }
+    .left-content { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; }
+    .logo { display: flex; align-items: baseline; gap: 2px; margin-bottom: 64px; }
+    .logo-mark { font-family: var(--ff-display); font-size: 1.6rem; font-weight: 500; color: #fff; }
+    .logo-mark span { color: var(--gold-light); }
+    .logo-badge { margin-left: 10px; font-size: 0.65rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); border: 1px solid rgba(184,151,90,0.4); padding: 2px 8px; border-radius: 2px; }
+    .hero { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+    .hero-eyebrow { font-size: 0.72rem; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold); margin-bottom: 20px; }
+    .hero-headline { font-family: var(--ff-display); font-size: clamp(2.6rem, 3.5vw, 3.8rem); font-weight: 300; line-height: 1.12; color: #fff; margin-bottom: 28px; }
+    .hero-headline em { font-style: italic; color: var(--gold-light); }
+    .hero-sub { font-size: 0.95rem; font-weight: 300; line-height: 1.7; color: rgba(255,255,255,0.55); max-width: 460px; margin-bottom: 48px; }
+    .features { display: flex; flex-direction: column; gap: 14px; margin-bottom: 56px; }
+    .feature { display: flex; align-items: flex-start; gap: 14px; }
+    .feature-icon { width: 32px; height: 32px; border-radius: 6px; background: rgba(184,151,90,0.15); border: 1px solid rgba(184,151,90,0.25); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; }
+    .feature-text strong { display: block; font-size: 0.88rem; font-weight: 500; color: rgba(255,255,255,0.9); margin-bottom: 2px; }
+    .feature-text span { font-size: 0.8rem; color: rgba(255,255,255,0.4); font-weight: 300; }
+    .stat-row { display: flex; gap: 36px; padding-top: 32px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .stat-num { font-family: var(--ff-display); font-size: 1.8rem; font-weight: 500; color: var(--gold-light); line-height: 1; }
+    .stat-label { font-size: 0.75rem; color: rgba(255,255,255,0.35); margin-top: 3px; letter-spacing: 0.04em; }
+    .right { background: var(--paper-card); border-left: 1px solid var(--border); display: flex; flex-direction: column; justify-content: center; padding: 56px 48px; position: relative; }
+    .right::before { content: ''; position: absolute; top: 0; right: 0; width: 120px; height: 120px; background: linear-gradient(225deg, var(--gold-faint) 0%, transparent 60%); pointer-events: none; }
+    .form-header { margin-bottom: 36px; }
+    .form-header h2 { font-family: var(--ff-display); font-size: 2rem; font-weight: 400; color: var(--ink); line-height: 1.15; margin-bottom: 6px; }
+    .form-header p { font-size: 0.875rem; color: var(--ink-soft); font-weight: 300; }
+    .form-rule { width: 40px; height: 2px; background: var(--gold); margin-bottom: 32px; }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 7px; }
+    input[type="email"], input[type="password"] { width: 100%; padding: 12px 16px; background: var(--paper); border: 1px solid var(--border-mid); border-radius: 6px; font-family: var(--ff-body); font-size: 0.95rem; color: var(--ink); transition: border-color 0.2s, box-shadow 0.2s; outline: none; }
+    input::placeholder { color: var(--ink-faint); }
+    input:focus { background: #fff; border-color: var(--green-mid); box-shadow: 0 0 0 3px rgba(45,84,69,0.1); }
+    .forgot { display: block; text-align: right; font-size: 0.78rem; color: var(--ink-soft); text-decoration: none; margin-top: -10px; margin-bottom: 24px; }
+    .btn-login { width: 100%; padding: 13px 24px; background: var(--green-deep); color: #fff; border: none; border-radius: 6px; font-family: var(--ff-body); font-size: 0.92rem; font-weight: 500; cursor: pointer; transition: background 0.2s, transform 0.1s; }
+    .btn-login:hover { background: var(--green-mid); }
+    .btn-login:active { transform: translateY(1px); }
+    .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+    .auth-message { display: none; margin-top: 14px; padding: 10px 14px; border-radius: 6px; font-size: 0.85rem; }
+    .auth-message.error { background: #FDF0F0; color: #7A1F1F; border: 1px solid rgba(122,31,31,0.15); }
+    .auth-message.info { background: var(--green-soft); color: var(--green-deep); border: 1px solid rgba(26,51,40,0.15); }
+    .form-divider { display: flex; align-items: center; gap: 14px; margin: 28px 0; color: var(--ink-faint); font-size: 0.75rem; }
+    .form-divider::before, .form-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .role-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .role-card { padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--paper); }
+    .role-card-name { font-size: 0.78rem; font-weight: 600; color: var(--ink); }
+    .role-card-desc { font-size: 0.72rem; color: var(--ink-faint); margin-top: 1px; }
+    .role-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+    .dot-admin { background: #6B3FA0; } .dot-attorney { background: #1A5096; } .dot-staff { background: #1A6B3E; } .dot-client { background: #8B5A1A; }
+    .form-footer { margin-top: 28px; font-size: 0.75rem; color: var(--ink-faint); text-align: center; line-height: 1.6; }
+    @media (max-width: 900px) { .shell { grid-template-columns: 1fr; } .stat-row { display: none; } .right { padding: 40px 32px; } }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <div class="left">
+    <div class="left-texture"></div>
+    <div class="left-content">
+      <div class="logo">
+        <div class="logo-mark">Lex<span>Core</span></div>
+        <div class="logo-badge">Legal SaaS</div>
+      </div>
+      <div class="hero">
+        <div class="hero-eyebrow">Legal Practice Management</div>
+        <h1 class="hero-headline">The platform<br>your firm<br><em>deserves.</em></h1>
+        <p class="hero-sub">Secure case management, AI-powered document analysis, and seamless client communication — built for modern law firms of every size.</p>
+        <div class="features">
+          <div class="feature"><div class="feature-icon">⚖</div><div class="feature-text"><strong>Role-Based Access Control</strong><span>Attorneys, staff, and clients each see only what they need</span></div></div>
+          <div class="feature"><div class="feature-icon">◈</div><div class="feature-text"><strong>AI Document Analysis</strong><span>Upload legal files and receive instant summaries and risk flags</span></div></div>
+          <div class="feature"><div class="feature-icon">◎</div><div class="feature-text"><strong>Secure & Multi-Firm Ready</strong><span>Bank-grade encryption with Row Level Security from day one</span></div></div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-item"><div class="stat-num">4</div><div class="stat-label">User roles</div></div>
+          <div class="stat-item"><div class="stat-num">100%</div><div class="stat-label">Data isolation</div></div>
+          <div class="stat-item"><div class="stat-num">∞</div><div class="stat-label">Firms supported</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="form-header">
+      <h2>Welcome back</h2>
+      <p>Sign in to access your firm's dashboard</p>
+    </div>
+    <div class="form-rule"></div>
+    <form id="login-form" novalidate>
+      <div class="form-group">
+        <label for="email">Email address</label>
+        <input type="email" id="email" name="email" placeholder="you@lawfirm.com" autocomplete="email" required />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="Enter your password" autocomplete="current-password" required />
+      </div>
+      <a href="#" class="forgot">Forgot password?</a>
+      <button type="submit" class="btn-login" id="login-btn">Sign in to LexCore</button>
+      <div id="auth-message" class="auth-message"></div>
+    </form>
+    <div class="form-divider">Access levels</div>
+    <div class="role-cards">
+      <div class="role-card"><div class="role-card-name"><span class="role-dot dot-admin"></span>Admin</div><div class="role-card-desc">Full firm management</div></div>
+      <div class="role-card"><div class="role-card-name"><span class="role-dot dot-attorney"></span>Attorney</div><div class="role-card-desc">Cases & documents</div></div>
+      <div class="role-card"><div class="role-card-name"><span class="role-dot dot-staff"></span>Staff</div><div class="role-card-desc">Support & uploads</div></div>
+      <div class="role-card"><div class="role-card-name"><span class="role-dot dot-client"></span>Client</div><div class="role-card-desc">View your case</div></div>
+    </div>
+    <p class="form-footer">Don't have an account? Contact your firm administrator.<br>All access is invitation-only for your security.</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'https://hwsokdbbjjtiwscldbpr.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3c29rZGJiamp0aXdzY2xkYnByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTAzOTgsImV4cCI6MjA4OTA4NjM5OH0.PV-f9KCQzlPm5stTxFOSN4sVJDRKqZnqKnFZ6qHWECk';
+  const { createClient } = supabase;
+  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function redirectToDashboard(role) {
+    const map = {
+      admin:    '/pages/dashboard-admin.html',
+      attorney: '/pages/dashboard-attorney.html',
+      staff:    '/pages/dashboard-staff.html',
+      client:   '/pages/dashboard-client.html'
+    };
+    window.location.replace(map[role] || '/index.html');
+  }
+
+  async function init() {
+    sessionStorage.removeItem('signed_out');
+    const { data: { session } } = await client.auth.getSession();
+    if (!session) return;
+    const { data: profile, error } = await client
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single();
+    if (error || !profile) {
+      await client.auth.signOut();
+      return;
+    }
+    redirectToDashboard(profile.role);
+  }
+  init();
+
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const btn = document.getElementById('login-btn');
+    const msg = document.getElementById('auth-message');
+
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+    msg.textContent = 'Verifying credentials...';
+    msg.className = 'auth-message info';
+    msg.style.display = 'block';
+
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      msg.textContent = 'Login failed: ' + error.message;
+      msg.className = 'auth-message error';
+      btn.disabled = false;
+      btn.textContent = 'Sign in to LexCore';
+      return;
+    }
+
+    const { data: profile } = await client
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .single();
+
+    if (!profile) {
+      msg.textContent = 'Account not set up. Contact your administrator.';
+      msg.className = 'auth-message error';
+      btn.disabled = false;
+      btn.textContent = 'Sign in to LexCore';
+      return;
+    }
+
+    msg.textContent = 'Login successful. Redirecting...';
+    msg.className = 'auth-message info';
+    redirectToDashboard(profile.role);
+  });
+</script>
+</body>
+</html>

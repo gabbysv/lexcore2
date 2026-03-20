@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — LexCore</title>
+  <link rel="stylesheet" href="../css/main.css" />
+</head>
+<body>
+  <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;">
+    <div style="background:#fff;border:1px solid #E2DDD8;border-radius:12px;padding:48px;width:100%;max-width:440px;box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+      <h2 style="margin-bottom:4px;">Welcome back</h2>
+      <p style="margin-bottom:32px;">Sign in to access your dashboard</p>
+      <form id="login-form" novalidate>
+        <div class="form-group"><label for="email">Email address</label><input type="email" id="email" placeholder="you@lawfirm.com" required /></div>
+        <div class="form-group"><label for="password">Password</label><input type="password" id="password" placeholder="Enter your password" required /></div>
+        <button type="submit" class="btn btn-primary btn-full" style="margin-top:8px;">Sign in</button>
+        <div id="auth-message" class="auth-message"></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://hwsokdbbjjtiwscldbpr.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3c29rZGJiamp0aXdzY2xkYnByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTAzOTgsImV4cCI6MjA4OTA4NjM5OH0.PV-f9KCQzlPm5stTxFOSN4sVJDRKqZnqKnFZ6qHWECk';
+    const { createClient } = supabase;
+    const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    function redirectToDashboard(role) {
+      const map = {
+        admin:    '../pages/dashboard-admin.html',
+        attorney: '../pages/dashboard-attorney.html',
+        staff:    '../pages/dashboard-staff.html',
+        client:   '../pages/dashboard-client.html'
+      };
+      window.location.replace(map[role] || '../index.html');
+    }
+
+    function showMessage(text, type) {
+      const el = document.getElementById('auth-message');
+      el.textContent = text;
+      el.className = 'auth-message ' + type;
+      el.style.display = 'block';
+    }
+
+    // If already logged in redirect to dashboard
+    async function init() {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const { data: { session } } = await client.auth.getSession();
+      if (session) {
+        const { data: profile } = await client.from('profiles').select('role').eq('id', session.user.id).single();
+        if (profile) redirectToDashboard(profile.role);
+      }
+    }
+    init();
+
+    // Login form handler
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const btn = e.target.querySelector('button[type="submit"]');
+
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+      showMessage('Verifying credentials...', 'info');
+
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        showMessage('Login failed: ' + error.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+        return;
+      }
+
+      const { data: profile } = await client.from('profiles').select('role').eq('id', data.user.id).single();
+
+      if (!profile) {
+        showMessage('Account not set up. Contact your administrator.', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+        return;
+      }
+
+      showMessage('Login successful. Redirecting...', 'info');
+      redirectToDashboard(profile.role);
+    });
+  </script>
+</body>
+</html>

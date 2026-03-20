@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cases — LexCore</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+    .filter-bar { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+    .filter-btn { padding:6px 16px; border-radius:99px; border:1px solid var(--color-border-dark); background:var(--color-surface); font-family:inherit; font-size:0.82rem; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+    .filter-btn.active { background:var(--color-accent); color:#fff; border-color:var(--color-accent); }
+    .case-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:12px; padding:20px 24px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; transition:box-shadow 0.15s, border-color 0.15s; cursor:pointer; }
+    .case-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.08); border-color:var(--color-border-dark); }
+    .case-card-left { flex:1; }
+    .case-card-title { font-weight:500; font-size:1rem; margin-bottom:6px; color:var(--color-text-primary); }
+    .case-card-meta { font-size:0.82rem; color:var(--color-text-muted); display:flex; gap:16px; flex-wrap:wrap; }
+    .case-card-right { display:flex; align-items:center; gap:8px; flex-shrink:0; margin-left:16px; flex-wrap:wrap; justify-content:flex-end; }
+    .practice-badge { padding:3px 10px; border-radius:99px; font-size:0.72rem; font-weight:500; background:var(--color-accent-light); color:var(--color-accent); white-space:nowrap; }
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--color-surface); border-radius:12px; padding:32px; width:100%; max-width:540px; box-shadow:0 16px 48px rgba(0,0,0,0.2); max-height:90vh; overflow-y:auto; }
+    .modal h3 { margin-bottom:20px; font-size:1.2rem; }
+    .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:24px; }
+    .detail-row { display:flex; gap:12px; margin-bottom:14px; font-size:0.9rem; align-items:flex-start; }
+    .detail-label { font-weight:500; min-width:120px; color:var(--color-text-secondary); flex-shrink:0; }
+    .empty-state { text-align:center; padding:60px 20px; color:var(--color-text-muted); }
+    .empty-state h3 { margin-bottom:8px; color:var(--color-text-secondary); font-size:1.1rem; }
+    .search-input { padding:9px 14px; border:1px solid var(--color-border-dark); border-radius:8px; font-family:inherit; font-size:0.9rem; width:220px; transition:border-color 0.15s; }
+    .search-input:focus { outline:none; border-color:var(--color-accent); box-shadow:0 0 0 3px rgba(28,61,90,0.1); }
+    .top-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .section-label { font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--color-text-muted); margin-bottom:8px; }
+    .specialist-hint { font-size:0.78rem; color:var(--color-accent); margin-top:4px; display:none; }
+    textarea { width:100%; padding:10px 14px; border:1px solid var(--color-border-dark); border-radius:8px; font-family:inherit; font-size:1rem; resize:vertical; transition:border-color 0.15s; }
+    textarea:focus { outline:none; border-color:var(--color-accent); box-shadow:0 0 0 3px rgba(28,61,90,0.1); }
+  </style>
+</head>
+<body class="auth-loading">
+  <div class="page-wrapper">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+
+      <div class="page-header">
+        <div>
+          <h1>Cases</h1>
+          <p id="cases-count" style="margin-top:4px;font-size:0.875rem;">Loading...</p>
+        </div>
+        <div class="top-controls">
+          <input type="text" class="search-input" id="search-input" placeholder="Search cases..." oninput="renderCases()" />
+          <button id="new-case-btn" class="btn btn-primary" style="display:none;" onclick="openCreateModal()">+ New Case</button>
+        </div>
+      </div>
+
+      <!-- Status filter -->
+      <div class="section-label">Filter by status</div>
+      <div class="filter-bar" id="status-filters">
+        <button class="filter-btn active" onclick="setStatusFilter('all', this)">All</button>
+        <button class="filter-btn" onclick="setStatusFilter('active', this)">Active</button>
+        <button class="filter-btn" onclick="setStatusFilter('pending', this)">Pending</button>
+        <button class="filter-btn" onclick="setStatusFilter('closed', this)">Closed</button>
+      </div>
+
+      <!-- Practice area filter -->
+      <div class="section-label">Filter by practice area</div>
+      <div class="filter-bar" id="practice-filters">
+        <button class="filter-btn active" onclick="setPracticeFilter('all', this)">All areas</button>
+      </div>
+
+      <!-- Cases list -->
+      <div id="cases-list">
+        <p style="text-align:center;color:var(--color-text-muted);padding:40px;">Loading cases...</p>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Case Detail Modal -->
+  <div class="modal-overlay" id="detail-modal">
+    <div class="modal">
+      <h3 id="detail-title">Case Details</h3>
+      <div id="detail-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('detail-modal')">Close</button>
+        <button class="btn btn-primary" id="edit-btn" onclick="openEditFromDetail()" style="display:none;">Edit Case</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Case Modal -->
+  <div class="modal-overlay" id="create-modal">
+    <div class="modal">
+      <h3>Create New Case</h3>
+      <form id="create-form">
+        <div class="form-group">
+          <label>Case Title *</label>
+          <input type="text" id="new-title" placeholder="e.g. Smith vs. Johnson" required />
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="new-desc" rows="3" placeholder="Brief case description..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Practice Area</label>
+          <select id="new-practice" onchange="filterAttorneysByPractice('new')">
+            <option value="">Select practice area...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Assign Attorney</label>
+          <select id="new-attorney">
+            <option value="">Select attorney...</option>
+          </select>
+          <div class="specialist-hint" id="new-specialist-hint">⭐ Showing specialists for selected practice area</div>
+        </div>
+        <div class="form-group">
+          <label>Assign Client</label>
+          <select id="new-client">
+            <option value="">Select client...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="new-status">
+            <option value="active">Active</option>
+            <option value="pending">Pending</option>
+            <option value="closed">Closed</option>
+          </select>
+        </div>
+        <div id="create-msg" style="display:none;padding:10px 14px;border-radius:8px;font-size:0.9rem;margin-bottom:16px;"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('create-modal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Case</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Case Modal -->
+  <div class="modal-overlay" id="edit-modal">
+    <div class="modal">
+      <h3>Edit Case</h3>
+      <input type="hidden" id="edit-id" />
+      <div class="form-group">
+        <label>Case Title</label>
+        <input type="text" id="edit-title" />
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea id="edit-desc" rows="3"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Practice Area</label>
+        <select id="edit-practice" onchange="filterAttorneysByPractice('edit')">
+          <option value="">No practice area</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Assign Attorney</label>
+        <select id="edit-attorney">
+          <option value="">No attorney</option>
+        </select>
+        <div class="specialist-hint" id="edit-specialist-hint">⭐ Showing specialists for selected practice area</div>
+      </div>
+      <div class="form-group">
+        <label>Assign Client</label>
+        <select id="edit-client">
+          <option value="">No client</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="edit-status">
+          <option value="active">Active</option>
+          <option value="pending">Pending</option>
+          <option value="closed">Closed</option>
+          <option value="archived">Archived</option>
+        </select>
+      </div>
+      <div id="edit-msg" style="display:none;padding:10px 14px;border-radius:8px;font-size:0.9rem;margin-bottom:16px;"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('edit-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://hwsokdbbjjtiwscldbpr.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3c29rZGJiamp0aXdzY2xkYnByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTAzOTgsImV4cCI6MjA4OTA4NjM5OH0.PV-f9KCQzlPm5stTxFOSN4sVJDRKqZnqKnFZ6qHWECk';
+    const { createClient } = supabase;
+    const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentProfile  = null;
+    let allCases        = [];
+    let practiceAreas   = [];
+    let attorneys       = [];
+    let clients         = [];
+    let userPracticeMap = {}; // attorneyId → [practiceAreaId, ...]
+    let statusFilter    = 'all';
+    let practiceFilter  = 'all';
+    let currentDetail   = null;
+
+    async function signOut() {
+      await client.auth.signOut();
+      window.location.replace('/index.html');
+    }
+
+    async function init() {
+      const { data: { session } } = await client.auth.getSession();
+      if (!session) { window.location.replace('/index.html'); return; }
+
+      const { data: profile } = await client.from('profiles').select('*').eq('id', session.user.id).single();
+      if (!profile) { window.location.replace('/index.html'); return; }
+
+      currentProfile = profile;
+      document.body.classList.remove('auth-loading');
+
+      if (['admin', 'attorney'].includes(profile.role)) {
+        document.getElementById('new-case-btn').style.display = 'inline-flex';
+      }
+
+      buildSidebar(profile);
+
+      await Promise.all([
+        loadPracticeAreas(),
+        loadCases(),
+        loadPeople(),
+      ]);
+    }
+
+    function buildSidebar(profile) {
+      const navMap = {
+        admin:    [['dashboard-admin.html','⊞ Dashboard'],['cases.html','⊟ Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
+        attorney: [['dashboard-attorney.html','⊞ Dashboard'],['cases.html','⊟ My Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages'],['upload.html','↑ Upload']],
+        staff:    [['dashboard-staff.html','⊞ Dashboard'],['cases.html','⊟ Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages'],['upload.html','↑ Upload']],
+        client:   [['dashboard-client.html','⊞ Dashboard'],['cases.html','⊟ My Case'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
+      };
+      const links = (navMap[profile.role] || []).map(([href, label]) =>
+        `<a href="${href}" class="${href === 'cases.html' ? 'active' : ''}">${label}</a>`
+      ).join('');
+      document.getElementById('sidebar-container').innerHTML = `
+        <aside class="sidebar">
+          <div class="sidebar-logo">LexCore<span>${profile.firm_name || 'Law Firm'}</span></div>
+          <nav class="sidebar-nav">${links}</nav>
+          <div class="sidebar-footer">
+            <strong>${profile.full_name || 'User'}</strong>
+            <span class="badge badge-${profile.role}" style="margin-top:6px;">${profile.role}</span><br/><br/>
+            <button onclick="signOut()" class="btn btn-secondary btn-sm" style="width:100%;margin-top:8px;">Sign out</button>
+          </div>
+        </aside>`;
+    }
+
+    async function loadPracticeAreas() {
+      const { data } = await client.from('practice_areas')
+        .select('*')
+        .eq('firm_id', currentProfile.firm_id)
+        .order('name');
+      practiceAreas = data || [];
+
+      // Build practice area filter pills
+      const bar = document.getElementById('practice-filters');
+      const pills = practiceAreas.map(pa =>
+        `<button class="filter-btn" onclick="setPracticeFilter('${pa.id}', this)">${pa.name}</button>`
+      ).join('');
+      bar.innerHTML = `<button class="filter-btn active" onclick="setPracticeFilter('all', this)">All areas</button>` + pills;
+
+      // Populate practice area dropdowns
+      const opts = practiceAreas.map(pa => `<option value="${pa.id}">${pa.name}</option>`).join('');
+      document.getElementById('new-practice').innerHTML = '<option value="">Select practice area...</option>' + opts;
+      document.getElementById('edit-practice').innerHTML = '<option value="">No practice area</option>' + opts;
+    }
+
+    async function loadCases() {
+      let query = client.from('cases')
+        .select('*, attorney:profiles!cases_attorney_id_fkey(id,full_name), client:profiles!cases_client_id_fkey(id,full_name), practice_area:practice_areas(id,name)')
+        .order('created_at', { ascending: false });
+
+      if (currentProfile.role === 'attorney') {
+        query = query.eq('attorney_id', currentProfile.id);
+      } else if (currentProfile.role === 'client') {
+        query = query.eq('client_id', currentProfile.id);
+      } else {
+        query = query.eq('firm_id', currentProfile.firm_id);
+      }
+
+      const { data } = await query;
+      allCases = data || [];
+      renderCases();
+    }
+
+    async function loadPeople() {
+      if (!['admin', 'attorney'].includes(currentProfile.role)) return;
+
+      const firmId = currentProfile.firm_id;
+
+      // Load attorneys
+      const { data: atts } = await client.from('profiles')
+        .select('id, full_name')
+        .eq('firm_id', firmId)
+        .eq('role', 'attorney');
+      attorneys = atts || [];
+
+      // Load clients
+      const { data: cls } = await client.from('profiles')
+        .select('id, full_name')
+        .eq('firm_id', firmId)
+        .eq('role', 'client');
+      clients = cls || [];
+
+      // Load user practice area links
+      const { data: upa } = await client.from('user_practice_areas')
+        .select('user_id, practice_area_id');
+
+      userPracticeMap = {};
+      (upa || []).forEach(row => {
+        if (!userPracticeMap[row.user_id]) userPracticeMap[row.user_id] = [];
+        userPracticeMap[row.user_id].push(row.practice_area_id);
+      });
+
+      // Populate client dropdowns
+      const clOpts = clients.map(c => `<option value="${c.id}">${c.full_name}</option>`).join('');
+      document.getElementById('new-client').innerHTML = '<option value="">No client</option>' + clOpts;
+      document.getElementById('edit-client').innerHTML = '<option value="">No client</option>' + clOpts;
+
+      // Populate attorney dropdowns with all attorneys initially
+      populateAttorneySelect('new-attorney', attorneys);
+      populateAttorneySelect('edit-attorney', attorneys);
+    }
+
+    function populateAttorneySelect(selectId, list, specialistIds = []) {
+      const select = document.getElementById(selectId);
+      const current = select.value;
+
+      if (specialistIds.length > 0) {
+        const specialists = list.filter(a => specialistIds.includes(a.id));
+        const others      = list.filter(a => !specialistIds.includes(a.id));
+        let html = '<option value="">No attorney</option>';
+        if (specialists.length) {
+          html += `<optgroup label="⭐ Specialists">` + specialists.map(a => `<option value="${a.id}">${a.full_name}</option>`).join('') + '</optgroup>';
+        }
+        if (others.length) {
+          html += `<optgroup label="Other attorneys">` + others.map(a => `<option value="${a.id}">${a.full_name}</option>`).join('') + '</optgroup>';
+        }
+        select.innerHTML = html;
+      } else {
+        select.innerHTML = '<option value="">No attorney</option>' + list.map(a => `<option value="${a.id}">${a.full_name}</option>`).join('');
+      }
+
+      if (current) select.value = current;
+    }
+
+    function filterAttorneysByPractice(prefix) {
+      const practiceId = document.getElementById(prefix + '-practice').value;
+      const hintEl     = document.getElementById(prefix + '-specialist-hint');
+
+      if (!practiceId) {
+        populateAttorneySelect(prefix + '-attorney', attorneys);
+        hintEl.style.display = 'none';
+        return;
+      }
+
+      // Find attorneys who specialise in this practice area
+      const specialistIds = Object.entries(userPracticeMap)
+        .filter(([, areas]) => areas.includes(practiceId))
+        .map(([userId]) => userId);
+
+      populateAttorneySelect(prefix + '-attorney', attorneys, specialistIds);
+      hintEl.style.display = specialistIds.length ? 'block' : 'none';
+    }
+
+    function renderCases() {
+      const search = document.getElementById('search-input').value.toLowerCase();
+      let filtered = allCases;
+
+      if (statusFilter !== 'all') {
+        filtered = filtered.filter(c => c.status === statusFilter);
+      }
+      if (practiceFilter !== 'all') {
+        filtered = filtered.filter(c => c.practice_area_id === practiceFilter);
+      }
+      if (search) {
+        filtered = filtered.filter(c =>
+          c.title.toLowerCase().includes(search) ||
+          c.attorney?.full_name?.toLowerCase().includes(search) ||
+          c.client?.full_name?.toLowerCase().includes(search) ||
+          c.practice_area?.name?.toLowerCase().includes(search)
+        );
+      }
+
+      document.getElementById('cases-count').textContent = `${filtered.length} case${filtered.length !== 1 ? 's' : ''}`;
+
+      const list = document.getElementById('cases-list');
+      if (!filtered.length) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <h3>No cases found</h3>
+            <p>Try a different filter or search term.</p>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = filtered.map(c => `
+        <div class="case-card" onclick="openDetail('${c.id}')">
+          <div class="case-card-left">
+            <div class="case-card-title">${c.title}</div>
+            <div class="case-card-meta">
+              <span>⚖ ${c.attorney?.full_name || 'No attorney'}</span>
+              <span>👤 ${c.client?.full_name || 'No client'}</span>
+              <span>📅 ${new Date(c.created_at).toLocaleDateString()}</span>
+            </div>
+          </div>
+          <div class="case-card-right">
+            ${c.practice_area ? `<span class="practice-badge">${c.practice_area.name}</span>` : ''}
+            <span class="badge badge-${c.status === 'active' ? 'success' : c.status === 'pending' ? 'warning' : 'error'}">${c.status}</span>
+          </div>
+        </div>`).join('');
+    }
+
+    function setStatusFilter(filter, btn) {
+      statusFilter = filter;
+      document.querySelectorAll('#status-filters .filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderCases();
+    }
+
+    function setPracticeFilter(filter, btn) {
+      practiceFilter = filter;
+      document.querySelectorAll('#practice-filters .filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderCases();
+    }
+
+    function openDetail(id) {
+      const c = allCases.find(x => x.id === id);
+      if (!c) return;
+      currentDetail = c;
+
+      document.getElementById('detail-title').textContent = c.title;
+      document.getElementById('detail-body').innerHTML = `
+        <div class="detail-row">
+          <span class="detail-label">Status</span>
+          <span class="badge badge-${c.status === 'active' ? 'success' : c.status === 'pending' ? 'warning' : 'error'}">${c.status}</span>
+        </div>
+        ${c.practice_area ? `
+        <div class="detail-row">
+          <span class="detail-label">Practice area</span>
+          <span class="practice-badge">${c.practice_area.name}</span>
+        </div>` : ''}
+        <div class="detail-row">
+          <span class="detail-label">Attorney</span>
+          <span>${c.attorney?.full_name || '—'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Client</span>
+          <span>${c.client?.full_name || '—'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Created</span>
+          <span>${new Date(c.created_at).toLocaleDateString()}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Last updated</span>
+          <span>${new Date(c.updated_at || c.created_at).toLocaleDateString()}</span>
+        </div>
+        ${c.description ? `
+        <div class="detail-row">
+          <span class="detail-label">Description</span>
+          <span>${c.description}</span>
+        </div>` : ''}
+      `;
+
+      const editBtn = document.getElementById('edit-btn');
+      editBtn.style.display = ['admin','attorney'].includes(currentProfile.role) ? 'inline-flex' : 'none';
+      document.getElementById('detail-modal').classList.add('open');
+    }
+
+    function openEditFromDetail() {
+      closeModal('detail-modal');
+      const c = currentDetail;
+      document.getElementById('edit-id').value         = c.id;
+      document.getElementById('edit-title').value      = c.title;
+      document.getElementById('edit-desc').value       = c.description || '';
+      document.getElementById('edit-status').value     = c.status;
+      document.getElementById('edit-practice').value   = c.practice_area_id || '';
+      document.getElementById('edit-attorney').value   = c.attorney_id || '';
+      document.getElementById('edit-client').value     = c.client_id || '';
+      filterAttorneysByPractice('edit');
+      document.getElementById('edit-modal').classList.add('open');
+    }
+
+    async function saveEdit() {
+      const id  = document.getElementById('edit-id').value;
+      const msg = document.getElementById('edit-msg');
+
+      const { error } = await client.from('cases').update({
+        title:           document.getElementById('edit-title').value.trim(),
+        description:     document.getElementById('edit-desc').value.trim(),
+        status:          document.getElementById('edit-status').value,
+        practice_area_id: document.getElementById('edit-practice').value || null,
+        attorney_id:     document.getElementById('edit-attorney').value || null,
+        client_id:       document.getElementById('edit-client').value || null,
+      }).eq('id', id);
+
+      if (error) { showMsg(msg, 'Error: ' + error.message, 'error'); return; }
+      closeModal('edit-modal');
+      await loadCases();
+    }
+
+    function openCreateModal() {
+      document.getElementById('create-modal').classList.add('open');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+
+    document.getElementById('create-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg   = document.getElementById('create-msg');
+      const title = document.getElementById('new-title').value.trim();
+      if (!title) { showMsg(msg, 'Please enter a case title.', 'error'); return; }
+
+      const { error } = await client.from('cases').insert({
+        firm_id:          currentProfile.firm_id,
+        title,
+        description:      document.getElementById('new-desc').value.trim(),
+        practice_area_id: document.getElementById('new-practice').value || null,
+        attorney_id:      document.getElementById('new-attorney').value || null,
+        client_id:        document.getElementById('new-client').value || null,
+        status:           document.getElementById('new-status').value,
+      });
+
+      if (error) { showMsg(msg, 'Error: ' + error.message, 'error'); return; }
+      showMsg(msg, 'Case created successfully!', 'success');
+      document.getElementById('create-form').reset();
+      document.getElementById('new-specialist-hint').style.display = 'none';
+      setTimeout(() => closeModal('create-modal'), 800);
+      await loadCases();
+    });
+
+    function showMsg(el, text, type) {
+      el.textContent    = text;
+      el.style.display  = 'block';
+      el.style.background = type === 'error' ? '#FDEDED' : '#EDFAF3';
+      el.style.color      = type === 'error' ? '#8B1A1A' : '#1D6B3E';
+      el.style.border     = `1px solid ${type === 'error' ? 'rgba(139,26,26,0.2)' : 'rgba(29,107,62,0.2)'}`;
+    }
+
+    init();
+  </script>
+</body>
+</html>

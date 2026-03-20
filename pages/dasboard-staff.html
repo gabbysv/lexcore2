@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Staff Dashboard — LexCore</title>
+  <link rel="stylesheet" href="../css/main.css" />
+</head>
+<body class="auth-loading">
+  <div class="page-wrapper">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+      <div style="margin-bottom:40px; display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <h1 id="greeting">Good morning</h1>
+          <p>Cases assigned to you are shown below.</p>
+        </div>
+        <button
+          id="signout-btn"
+          style="padding:10px 20px; background:#1C3D5A; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:0.9rem; font-family:inherit; flex-shrink:0;">
+          Sign Out
+        </button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-value" id="stat-assigned">—</div><div class="stat-label">Cases assigned to me</div></div>
+        <div class="stat-card"><div class="stat-value" id="stat-docs">—</div><div class="stat-label">Documents uploaded</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Assigned Cases</h3></div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Case title</th><th>Attorney</th><th>Status</th></tr></thead>
+            <tbody id="cases-tbody"><tr><td colspan="3" style="text-align:center;color:#9B9791;padding:32px;">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://hwsokdbbjjtiwscldbpr.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3c29rZGJiamp0aXdzY2xkYnByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTAzOTgsImV4cCI6MjA4OTA4NjM5OH0.PV-f9KCQzlPm5stTxFOSN4sVJDRKqZnqKnFZ6qHWECk';
+    const { createClient } = supabase;
+    const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    async function signOut() {
+      await client.auth.signOut();
+      window.location.replace('/index.html');
+    }
+
+    document.getElementById('signout-btn').addEventListener('click', signOut);
+
+    async function init() {
+      const { data: { session } } = await client.auth.getSession();
+      if (!session) { window.location.replace('/index.html'); return; }
+
+      const { data: profile } = await client.from('profiles').select('*').eq('id', session.user.id).single();
+      if (!profile || profile.role !== 'staff') { window.location.replace('/index.html'); return; }
+
+      document.body.classList.remove('auth-loading');
+
+      const hour = new Date().getHours();
+      document.getElementById('greeting').textContent = `${hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'}, ${profile.full_name?.split(' ')[0] || 'Staff'}`;
+
+      document.getElementById('sidebar-container').innerHTML = `
+        <aside class="sidebar">
+          <div class="sidebar-logo">LexCore<span>${profile.firm_name || 'Law Firm'}</span></div>
+          <nav class="sidebar-nav">
+            <a href="dashboard-staff.html" class="active">⊞ Dashboard</a>
+            <a href="cases.html">⊟ Cases</a>
+            <a href="documents.html">⊡ Documents</a>
+            <a href="messages.html">◷ Messages</a>
+            <a href="upload.html">↑ Upload</a>
+          </nav>
+          <div class="sidebar-footer">
+            <strong>${profile.full_name || 'Staff'}</strong>
+            <span class="badge badge-staff" style="margin-top:6px;">staff</span>
+            <br/><br/>
+            <button id="sidebar-signout" class="btn btn-secondary btn-sm" style="width:100%;margin-top:8px;">Sign out</button>
+          </div>
+        </aside>`;
+
+      document.getElementById('sidebar-signout').addEventListener('click', signOut);
+
+      const { data: assignments } = await client
+        .from('case_staff')
+        .select('case:cases(id,title,status,attorney:profiles!cases_attorney_id_fkey(full_name))')
+        .eq('staff_id', profile.id);
+
+      const cases = (assignments || []).map(a => a.case).filter(Boolean);
+      document.getElementById('stat-assigned').textContent = cases.length;
+
+      const { count: dc } = await client
+        .from('documents')
+        .select('*', { count: 'exact', head: true })
+        .eq('uploaded_by', profile.id);
+      document.getElementById('stat-docs').textContent = dc ?? 0;
+
+      const tbody = document.getElementById('cases-tbody');
+      if (!cases.length) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#9B9791;padding:32px;">No cases assigned to you yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = cases.map(c => `
+        <tr>
+          <td><strong>${c.title}</strong></td>
+          <td>${c.attorney?.full_name || '—'}</td>
+          <td><span class="badge badge-${c.status === 'active' ? 'success' : 'warning'}">${c.status}</span></td>
+        </tr>`).join('');
+    }
+
+    init();
+  </script>
+</body>
+</html>
