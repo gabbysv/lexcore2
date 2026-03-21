@@ -186,9 +186,9 @@
     let clients = [];
 
     async function signOut() {
-      await client.auth.signOut();
-      window.location.replace('/index.html');
-    }
+  await client.auth.signOut();
+  window.location.replace('/lexcore2/index.html');
+}
     document.getElementById('signout-btn').addEventListener('click', signOut);
 
     // Tab switching
