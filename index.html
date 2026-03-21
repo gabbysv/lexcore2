@@ -128,15 +128,14 @@
   const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   function redirectToDashboard(role) {
-    const map = {
-      admin:    '/pages/dashboard-admin.html',
-      attorney: '/pages/dashboard-attorney.html',
-      staff:    '/pages/dashboard-staff.html',
-      client:   '/pages/dashboard-client.html'
-    };
-    window.location.replace(map[role] || '/index.html');
-  }
-
+  const map = {
+    admin:    '/lexcore2/pages/dashboard-admin.html',
+    attorney: '/lexcore2/pages/dashboard-attorney.html',
+    staff:    '/lexcore2/pages/dashboard-staff.html',
+    client:   '/lexcore2/pages/dashboard-client.html'
+  };
+  window.location.replace(map[role] || '/lexcore2/index.html');
+}
   async function init() {
     sessionStorage.removeItem('signed_out');
     const { data: { session } } = await client.auth.getSession();
