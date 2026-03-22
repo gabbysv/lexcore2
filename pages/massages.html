@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Messages — LexCore</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .messages-layout { display:grid; grid-template-columns:300px 1fr; gap:0; height:calc(100vh - 48px); overflow:hidden; }
+    .cases-panel { border-right:1px solid var(--color-border); overflow-y:auto; background:var(--color-surface); }
+    .cases-panel-header { padding:16px 20px; border-bottom:1px solid var(--color-border); }
+    .cases-panel-header h3 { font-size:1rem; margin-bottom:8px; }
+    .case-search { width:100%; padding:8px 12px; border:1px solid var(--color-border-dark); border-radius:8px; font-family:inherit; font-size:0.875rem; }
+    .case-search:focus { outline:none; border-color:var(--color-accent); }
+    .case-item { padding:14px 20px; cursor:pointer; border-bottom:1px solid var(--color-border); transition:background 0.15s; }
+    .case-item:hover { background:var(--color-surface-alt); }
+    .case-item.active { background:var(--color-accent-light); border-left:3px solid var(--color-accent); }
+    .case-item-title { font-size:0.9rem; font-weight:500; margin-bottom:2px; color:var(--color-text-primary); }
+    .case-item-meta { font-size:0.75rem; color:var(--color-text-muted); }
+    .case-item-preview { font-size:0.78rem; color:var(--color-text-secondary); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .unread-badge { display:inline-block; background:var(--color-accent); color:#fff; font-size:0.65rem; font-weight:600; padding:2px 6px; border-radius:99px; margin-left:6px; }
+    .chat-panel { display:flex; flex-direction:column; background:var(--color-bg); }
+    .chat-header { padding:16px 24px; background:var(--color-surface); border-bottom:1px solid var(--color-border); display:flex; align-items:center; gap:12px; }
+    .chat-header-info h3 { font-size:1rem; margin-bottom:2px; }
+    .chat-header-info p { font-size:0.78rem; color:var(--color-text-muted); }
+    .chat-messages { flex:1; overflow-y:auto; padding:24px; display:flex; flex-direction:column; gap:12px; }
+    .message-group { display:flex; flex-direction:column; gap:4px; }
+    .message-group.sent { align-items:flex-end; }
+    .message-group.received { align-items:flex-start; }
+    .message-sender { font-size:0.72rem; color:var(--color-text-muted); margin-bottom:2px; padding:0 12px; }
+    .message-bubble { max-width:70%; padding:10px 14px; border-radius:12px; font-size:0.9rem; line-height:1.5; word-break:break-word; }
+    .message-bubble.sent { background:var(--color-accent); color:#fff; border-bottom-right-radius:4px; }
+    .message-bubble.received { background:var(--color-surface); border:1px solid var(--color-border); color:var(--color-text-primary); border-bottom-left-radius:4px; }
+    .message-time { font-size:0.68rem; color:var(--color-text-muted); padding:0 12px; }
+    .chat-input-area { padding:16px 24px; background:var(--color-surface); border-top:1px solid var(--color-border); display:flex; gap:8px; align-items:flex-end; }
+    .chat-input { flex:1; padding:10px 14px; border:1px solid var(--color-border-dark); border-radius:8px; font-family:inherit; font-size:0.9rem; resize:none; max-height:120px; line-height:1.5; transition:border-color 0.15s; }
+    .chat-input:focus { outline:none; border-color:var(--color-accent); box-shadow:0 0 0 3px rgba(28,61,90,0.1); }
+    .send-btn { padding:10px 20px; background:var(--color-accent); color:#fff; border:none; border-radius:8px; font-family:inherit; font-size:0.9rem; font-weight:500; cursor:pointer; transition:background 0.15s; white-space:nowrap; }
+    .send-btn:hover { background:var(--color-accent-hover); }
+    .send-btn:disabled { opacity:0.5; cursor:not-allowed; }
+    .no-case-selected { flex:1; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; color:var(--color-text-muted); }
+    .no-case-selected h3 { color:var(--color-text-secondary); }
+    .date-divider { text-align:center; font-size:0.72rem; color:var(--color-text-muted); margin:8px 0; position:relative; }
+    .date-divider::before, .date-divider::after { content:''; position:absolute; top:50%; width:40%; height:1px; background:var(--color-border); }
+    .date-divider::before { left:0; }
+    .date-divider::after { right:0; }
+    .typing-indicator { font-size:0.78rem; color:var(--color-text-muted); padding:0 24px 8px; height:20px; }
+    @media (max-width:768px) {
+      .messages-layout { grid-template-columns:1fr; }
+      .cases-panel { display:none; }
+      .cases-panel.show { display:block; }
+    }
+  </style>
+</head>
+<body class="auth-loading">
+  <div class="page-wrapper">
+    <div id="sidebar-container"></div>
+    <main class="main-content" style="padding:0;display:flex;flex-direction:column;">
+
+      <div class="messages-layout">
+
+        <!-- Left panel: case list -->
+        <div class="cases-panel">
+          <div class="cases-panel-header">
+            <h3>Conversations</h3>
+            <input type="text" class="case-search" id="case-search" placeholder="Search cases..." oninput="filterCaseList()" />
+          </div>
+          <div id="case-list">
+            <p style="text-align:center;color:var(--color-text-muted);padding:24px;font-size:0.875rem;">Loading...</p>
+          </div>
+        </div>
+
+        <!-- Right panel: chat -->
+        <div class="chat-panel" id="chat-panel">
+          <div class="no-case-selected" id="no-case">
+            <div style="font-size:48px;">💬</div>
+            <h3>Select a case to start messaging</h3>
+            <p>Choose a case from the left panel</p>
+          </div>
+
+          <!-- Chat header (hidden until case selected) -->
+          <div class="chat-header" id="chat-header" style="display:none;">
+            <div style="width:40px;height:40px;border-radius:50%;background:var(--color-accent-light);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">⚖</div>
+            <div class="chat-header-info">
+              <h3 id="chat-case-title">Case Title</h3>
+              <p id="chat-case-meta">Attorney • Client</p>
+            </div>
+          </div>
+
+          <!-- Messages area -->
+          <div class="chat-messages" id="chat-messages" style="display:none;"></div>
+
+          <!-- Typing indicator -->
+          <div class="typing-indicator" id="typing-indicator" style="display:none;"></div>
+
+          <!-- Input area -->
+          <div class="chat-input-area" id="chat-input-area" style="display:none;">
+            <textarea
+              class="chat-input"
+              id="message-input"
+              placeholder="Type your message..."
+              rows="1"
+              onkeydown="handleKeyDown(event)"
+              oninput="autoResize(this)"
+            ></textarea>
+            <button class="send-btn" id="send-btn" onclick="sendMessage()">Send ↗</button>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://hwsokdbbjjtiwscldbpr.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3c29rZGJiamp0aXdzY2xkYnByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTAzOTgsImV4cCI6MjA4OTA4NjM5OH0.PV-f9KCQzlPm5stTxFOSN4sVJDRKqZnqKnFZ6qHWECk';
+    const { createClient } = supabase;
+    const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentProfile  = null;
+    let allCases        = [];
+    let currentCase     = null;
+    let messages        = [];
+    let realtimeChannel = null;
+
+    async function signOut() {
+      await client.auth.signOut();
+      window.location.replace('/lexcore2/index.html');
+    }
+
+    async function init() {
+      const { data: { session } } = await client.auth.getSession();
+      if (!session) { window.location.replace('/lexcore2/index.html'); return; }
+
+      const { data: profile } = await client.from('profiles').select('*').eq('id', session.user.id).single();
+      if (!profile) { window.location.replace('/lexcore2/index.html'); return; }
+
+      currentProfile = profile;
+      document.body.classList.remove('auth-loading');
+
+      buildSidebar(profile);
+      await loadCases();
+    }
+
+    function buildSidebar(profile) {
+      const navMap = {
+        admin:    [['dashboard-admin.html','⊞ Dashboard'],['cases.html','⊟ Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
+        attorney: [['dashboard-attorney.html','⊞ Dashboard'],['cases.html','⊟ My Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
+        staff:    [['dashboard-staff.html','⊞ Dashboard'],['cases.html','⊟ Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
+        client:   [['dashboard-client.html','⊞ Dashboard'],['cases.html','⊟ My Case'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
+      };
+      const links = (navMap[profile.role] || []).map(([href, label]) =>
+        `<a href="${href}" class="${href === 'messages.html' ? 'active' : ''}">${label}</a>`
+      ).join('');
+      document.getElementById('sidebar-container').innerHTML = `
+        <aside class="sidebar">
+          <div class="sidebar-logo">LexCore<span>${profile.firm_name || 'Law Firm'}</span></div>
+          <nav class="sidebar-nav">${links}</nav>
+          <div class="sidebar-footer">
+            <strong>${profile.full_name || 'User'}</strong>
+            <span class="badge badge-${profile.role}" style="margin-top:6px;">${profile.role}</span><br/><br/>
+            <button onclick="signOut()" class="btn btn-secondary btn-sm" style="width:100%;margin-top:8px;">Sign out</button>
+          </div>
+        </aside>`;
+    }
+
+    async function loadCases() {
+      let query = client.from('cases')
+        .select('*, attorney:profiles!cases_attorney_id_fkey(full_name), client:profiles!cases_client_id_fkey(full_name)')
+        .order('updated_at', { ascending: false });
+
+      if (currentProfile.role === 'attorney') {
+        query = query.eq('attorney_id', currentProfile.id);
+      } else if (currentProfile.role === 'client') {
+        query = query.eq('client_id', currentProfile.id);
+      } else {
+        query = query.eq('firm_id', currentProfile.firm_id);
+      }
+
+      const { data } = await query;
+      allCases = data || [];
+      renderCaseList(allCases);
+    }
+
+    function renderCaseList(cases) {
+      const list = document.getElementById('case-list');
+      if (!cases.length) {
+        list.innerHTML = '<p style="text-align:center;color:var(--color-text-muted);padding:24px;font-size:0.875rem;">No cases found.</p>';
+        return;
+      }
+      list.innerHTML = cases.map(c => `
+        <div class="case-item ${currentCase?.id === c.id ? 'active' : ''}" onclick="selectCase('${c.id}')">
+          <div class="case-item-title">${c.title}</div>
+          <div class="case-item-meta">
+            ${c.attorney?.full_name || 'No attorney'} • ${c.client?.full_name || 'No client'}
+          </div>
+          <div class="case-item-preview" id="preview-${c.id}">Click to view messages</div>
+        </div>`).join('');
+    }
+
+    function filterCaseList() {
+      const search = document.getElementById('case-search').value.toLowerCase();
+      const filtered = allCases.filter(c =>
+        c.title.toLowerCase().includes(search) ||
+        c.attorney?.full_name?.toLowerCase().includes(search) ||
+        c.client?.full_name?.toLowerCase().includes(search)
+      );
+      renderCaseList(filtered);
+    }
+
+    async function selectCase(caseId) {
+      currentCase = allCases.find(c => c.id === caseId);
+      if (!currentCase) return;
+
+      // Update active state in list
+      document.querySelectorAll('.case-item').forEach(el => el.classList.remove('active'));
+      document.querySelector(`[onclick="selectCase('${caseId}')"]`)?.classList.add('active');
+
+      // Show chat UI
+      document.getElementById('no-case').style.display        = 'none';
+      document.getElementById('chat-header').style.display    = 'flex';
+      document.getElementById('chat-messages').style.display  = 'flex';
+      document.getElementById('chat-input-area').style.display = 'flex';
+      document.getElementById('typing-indicator').style.display = 'block';
+
+      // Set chat header
+      document.getElementById('chat-case-title').textContent = currentCase.title;
+      document.getElementById('chat-case-meta').textContent =
+        `${currentCase.attorney?.full_name || 'No attorney'} • ${currentCase.client?.full_name || 'No client'}`;
+
+      // Load messages
+      await loadMessages(caseId);
+
+      // Subscribe to realtime updates
+      subscribeToMessages(caseId);
+
+      // Focus input
+      document.getElementById('message-input').focus();
+    }
+
+    async function loadMessages(caseId) {
+      const { data } = await client.from('messages')
+        .select('*, sender:profiles!messages_sender_id_fkey(id, full_name, role)')
+        .eq('case_id', caseId)
+        .order('sent_at', { ascending: true });
+
+      messages = data || [];
+      renderMessages();
+    }
+
+    function renderMessages() {
+      const container = document.getElementById('chat-messages');
+      if (!messages.length) {
+        container.innerHTML = `
+          <div style="text-align:center;color:var(--color-text-muted);padding:40px;font-size:0.875rem;">
+            No messages yet. Start the conversation!
+          </div>`;
+        return;
+      }
+
+      let lastDate = null;
+      let html = '';
+
+      messages.forEach(msg => {
+        const isSent    = msg.sender_id === currentProfile.id;
+        const msgDate   = new Date(msg.sent_at).toLocaleDateString();
+        const msgTime   = new Date(msg.sent_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+        const senderName = msg.sender?.full_name || 'Unknown';
+
+        // Date divider
+        if (msgDate !== lastDate) {
+          html += `<div class="date-divider">${msgDate === new Date().toLocaleDateString() ? 'Today' : msgDate}</div>`;
+          lastDate = msgDate;
+        }
+
+        html += `
+          <div class="message-group ${isSent ? 'sent' : 'received'}">
+            ${!isSent ? `<div class="message-sender">${senderName}</div>` : ''}
+            <div class="message-bubble ${isSent ? 'sent' : 'received'}">${escapeHtml(msg.content)}</div>
+            <div class="message-time">${msgTime}</div>
+          </div>`;
+      });
+
+      container.innerHTML = html;
+
+      // Scroll to bottom
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function subscribeToMessages(caseId) {
+      // Unsubscribe from previous channel
+      if (realtimeChannel) {
+        client.removeChannel(realtimeChannel);
+      }
+
+      realtimeChannel = client
+        .channel('messages-' + caseId)
+        .on('postgres_changes', {
+          event:  'INSERT',
+          schema: 'public',
+          table:  'messages',
+          filter: `case_id=eq.${caseId}`
+        }, async (payload) => {
+          // Fetch the new message with sender info
+          const { data: newMsg } = await client.from('messages')
+            .select('*, sender:profiles!messages_sender_id_fkey(id, full_name, role)')
+            .eq('id', payload.new.id)
+            .single();
+
+          if (newMsg) {
+            messages.push(newMsg);
+            renderMessages();
+
+            // Update preview in case list
+            const preview = document.getElementById('preview-' + caseId);
+            if (preview) preview.textContent = newMsg.content;
+          }
+        })
+        .subscribe();
+    }
+
+    async function sendMessage() {
+      const input   = document.getElementById('message-input');
+      const content = input.value.trim();
+      const btn     = document.getElementById('send-btn');
+
+      if (!content || !currentCase) return;
+
+      btn.disabled = true;
+      input.value  = '';
+      autoResize(input);
+
+      const { error } = await client.from('messages').insert({
+        case_id:   currentCase.id,
+        sender_id: currentProfile.id,
+        content:   content,
+      });
+
+      if (error) {
+        input.value = content;
+        console.error('Send failed:', error);
+      }
+
+      btn.disabled = false;
+      input.focus();
+    }
+
+    function handleKeyDown(e) {
+      // Send on Enter (not Shift+Enter)
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    }
+
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/\n/g, '<br/>');
+    }
+
+    init();
+  </script>
+</body>
+</html>
