@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Documents — LexCore</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+    .doc-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px; }
+    .doc-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:12px; padding:20px; transition:box-shadow 0.15s, border-color 0.15s; }
+    .doc-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.08); border-color:var(--color-border-dark); }
+    .doc-icon { width:48px; height:48px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:22px; margin-bottom:12px; }
+    .doc-icon.pdf { background:#FDE8E8; }
+    .doc-icon.word { background:#E8EFF8; }
+    .doc-icon.image { background:#E8F4EE; }
+    .doc-icon.other { background:#F0EDE8; }
+    .doc-name { font-weight:500; font-size:0.9rem; margin-bottom:4px; word-break:break-word; color:var(--color-text-primary); }
+    .doc-meta { font-size:0.78rem; color:var(--color-text-muted); margin-bottom:12px; }
+    .doc-actions { display:flex; gap:8px; }
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--color-surface); border-radius:12px; padding:32px; width:100%; max-width:520px; box-shadow:0 16px 48px rgba(0,0,0,0.2); }
+    .modal h3 { margin-bottom:20px; }
+    .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:24px; }
+    .upload-zone { border:2px dashed var(--color-border-dark); border-radius:12px; padding:40px 20px; text-align:center; cursor:pointer; transition:all 0.15s; background:var(--color-surface-alt); }
+    .upload-zone:hover, .upload-zone.dragover { border-color:var(--color-accent); background:var(--color-accent-light); }
+    .upload-zone input { display:none; }
+    .upload-icon { font-size:36px; margin-bottom:12px; }
+    .upload-zone h4 { margin-bottom:4px; font-size:1rem; }
+    .upload-zone p { font-size:0.82rem; color:var(--color-text-muted); }
+    .progress-bar { height:6px; background:var(--color-border); border-radius:99px; overflow:hidden; margin-top:16px; display:none; }
+    .progress-fill { height:100%; background:var(--color-accent); border-radius:99px; transition:width 0.3s; width:0%; }
+    .filter-bar { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+    .filter-btn { padding:6px 16px; border-radius:99px; border:1px solid var(--color-border-dark); background:var(--color-surface); font-family:inherit; font-size:0.82rem; cursor:pointer; transition:all 0.15s; }
+    .filter-btn.active { background:var(--color-accent); color:#fff; border-color:var(--color-accent); }
+    .empty-state { text-align:center; padding:60px 20px; color:var(--color-text-muted); }
+    .empty-state h3 { margin-bottom:8px; color:var(--color-text-secondary); }
+    .case-select { padding:9px 14px; border:1px solid var(--color-border-dark); border-radius:8px; font-family:inherit; font-size:0.9rem; min-width:200px; }
+    .case-select:focus { outline:none; border-color:var(--color-accent); }
+    .file-size { display:inline-block; }
+  </style>
+</head>
+<body class="auth-loading">
+  <div class="page-wrapper">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+
+      <div class="page-header">
+        <div>
+          <h1>Documents</h1>
+          <p id="doc-count" style="margin-top:4px;font-size:0.875rem;">Loading...</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select class="case-select" id="case-filter" onchange="filterByCase()">
+            <option value="all">All cases</option>
+          </select>
+          <button id="upload-btn" class="btn btn-primary" style="display:none;" onclick="openUploadModal()">↑ Upload Document</button>
+        </div>
+      </div>
+
+      <!-- File type filters -->
+      <div class="filter-bar">
+        <button class="filter-btn active" onclick="setTypeFilter('all', this)">All files</button>
+        <button class="filter-btn" onclick="setTypeFilter('pdf', this)">PDF</button>
+        <button class="filter-btn" onclick="setTypeFilter('word', this)">Word</button>
+        <button class="filter-btn" onclick="setTypeFilter('image', this)">Images</button>
+      </div>
+
+      <!-- Documents grid -->
+      <div id="docs-grid" class="doc-grid">
+        <p style="text-align:center;color:var(--color-text-muted);padding:40px;grid-column:1/-1;">Loading documents...</p>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Upload Modal -->
+  <div class="modal-overlay" id="upload-modal">
+    <div class="modal">
+      <h3>Upload Document</h3>
+
+      <div class="form-group">
+        <label>Link to Case *</label>
+        <select id="upload-case" class="case-select" style="width:100%;">
+          <option value="">Select a case...</option>
+        </select>
+      </div>
+
+      <!-- Upload zone -->
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+        <input type="file" id="file-input" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt" onchange="fileSelected(event)" />
+        <div class="upload-icon">📎</div>
+        <h4>Click to browse or drag & drop</h4>
+        <p>PDF, Word, Images up to 10MB</p>
+      </div>
+
+      <div id="selected-file" style="display:none;margin-top:12px;padding:10px 14px;background:var(--color-surface-alt);border-radius:8px;font-size:0.875rem;">
+        <strong id="selected-name"></strong>
+        <span id="selected-size" style="color:var(--color-text-muted);margin-left:8px;"></span>
+      </div>
+
+      <div class="progress-bar" id="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+
+      <div id="upload-msg" style="display:none;padding:10px 14px;border-radius:8px;font-size:0.9rem;margin-top:12px;"></div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+        <button class="btn btn-primary" id="upload-submit" onclick="uploadFile()">Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://hwsokdbbjjtiwscldbpr.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3c29rZGJiamp0aXdzY2xkYnByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTAzOTgsImV4cCI6MjA4OTA4NjM5OH0.PV-f9KCQzlPm5stTxFOSN4sVJDRKqZnqKnFZ6qHWECk';
+    const { createClient } = supabase;
+    const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentProfile = null;
+    let allDocs        = [];
+    let allCases       = [];
+    let selectedFile   = null;
+    let caseFilter     = 'all';
+    let typeFilter     = 'all';
+
+    async function signOut() {
+      await client.auth.signOut();
+      window.location.replace('/lexcore2/index.html');
+    }
+
+    async function init() {
+      const { data: { session } } = await client.auth.getSession();
+      if (!session) { window.location.replace('/lexcore2/index.html'); return; }
+
+      const { data: profile } = await client.from('profiles').select('*').eq('id', session.user.id).single();
+      if (!profile) { window.location.replace('/lexcore2/index.html'); return; }
+
+      currentProfile = profile;
+      document.body.classList.remove('auth-loading');
+
+      // Show upload button for admin, attorney, staff
+      if (['admin', 'attorney', 'staff'].includes(profile.role)) {
+        document.getElementById('upload-btn').style.display = 'inline-flex';
+      }
+
+      buildSidebar(profile);
+      await Promise.all([loadCases(), loadDocuments()]);
+    }
+
+    function buildSidebar(profile) {
+      const navMap = {
+        admin:    [['dashboard-admin.html','⊞ Dashboard'],['cases.html','⊟ Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
+        attorney: [['dashboard-attorney.html','⊞ Dashboard'],['cases.html','⊟ My Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages'],['upload.html','↑ Upload']],
+        staff:    [['dashboard-staff.html','⊞ Dashboard'],['cases.html','⊟ Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages'],['upload.html','↑ Upload']],
+        client:   [['dashboard-client.html','⊞ Dashboard'],['cases.html','⊟ My Case'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
+      };
+      const links = (navMap[profile.role] || []).map(([href, label]) =>
+        `<a href="${href}" class="${href === 'documents.html' ? 'active' : ''}">${label}</a>`
+      ).join('');
+      document.getElementById('sidebar-container').innerHTML = `
+        <aside class="sidebar">
+          <div class="sidebar-logo">LexCore<span>${profile.firm_name || 'Law Firm'}</span></div>
+          <nav class="sidebar-nav">${links}</nav>
+          <div class="sidebar-footer">
+            <strong>${profile.full_name || 'User'}</strong>
+            <span class="badge badge-${profile.role}" style="margin-top:6px;">${profile.role}</span><br/><br/>
+            <button onclick="signOut()" class="btn btn-secondary btn-sm" style="width:100%;margin-top:8px;">Sign out</button>
+          </div>
+        </aside>`;
+    }
+
+    async function loadCases() {
+      let query = client.from('cases').select('id, title').order('title');
+
+      if (currentProfile.role === 'attorney') {
+        query = query.eq('attorney_id', currentProfile.id);
+      } else if (currentProfile.role === 'client') {
+        query = query.eq('client_id', currentProfile.id);
+      } else {
+        query = query.eq('firm_id', currentProfile.firm_id);
+      }
+
+      const { data } = await query;
+      allCases = data || [];
+
+      // Populate case filter dropdown
+      const caseOpts = allCases.map(c => `<option value="${c.id}">${c.title}</option>`).join('');
+      document.getElementById('case-filter').innerHTML = '<option value="all">All cases</option>' + caseOpts;
+      document.getElementById('upload-case').innerHTML = '<option value="">Select a case...</option>' + caseOpts;
+    }
+
+    async function loadDocuments() {
+      let query = client.from('documents')
+        .select('*, case:cases(id, title), uploader:profiles!documents_uploaded_by_fkey(full_name)')
+        .order('uploaded_at', { ascending: false });
+
+      if (currentProfile.role === 'attorney') {
+        query = query.eq('cases.attorney_id', currentProfile.id);
+      } else if (currentProfile.role === 'client') {
+        query = query.eq('cases.client_id', currentProfile.id);
+      }
+
+      const { data } = await query;
+      allDocs = (data || []).filter(d => d.case !== null);
+      renderDocs();
+    }
+
+    function renderDocs() {
+      let filtered = allDocs;
+
+      if (caseFilter !== 'all') {
+        filtered = filtered.filter(d => d.case_id === caseFilter);
+      }
+
+      if (typeFilter !== 'all') {
+        filtered = filtered.filter(d => getFileType(d.file_name) === typeFilter);
+      }
+
+      document.getElementById('doc-count').textContent = `${filtered.length} document${filtered.length !== 1 ? 's' : ''}`;
+
+      const grid = document.getElementById('docs-grid');
+      if (!filtered.length) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column:1/-1;">
+            <h3>No documents found</h3>
+            <p>${allDocs.length === 0 ? 'Upload your first document using the button above.' : 'Try a different filter.'}</p>
+          </div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(doc => `
+        <div class="doc-card">
+          <div class="doc-icon ${getFileType(doc.file_name)}">${getFileIcon(doc.file_name)}</div>
+          <div class="doc-name">${doc.file_name}</div>
+          <div class="doc-meta">
+            📁 ${doc.case?.title || '—'}<br/>
+            👤 ${doc.uploader?.full_name || '—'}<br/>
+            📅 ${new Date(doc.uploaded_at).toLocaleDateString()}<br/>
+            💾 ${formatSize(doc.file_size)}
+          </div>
+          <div class="doc-actions">
+            <button class="btn btn-primary btn-sm" onclick="downloadDoc('${doc.id}', '${doc.file_path}', '${doc.file_name}')">↓ Download</button>
+            ${['admin', 'attorney', 'staff'].includes(currentProfile.role) ?
+              `<button class="btn btn-secondary btn-sm" onclick="deleteDoc('${doc.id}', '${doc.file_path}')">✕ Delete</button>` : ''}
+          </div>
+        </div>`).join('');
+    }
+
+    function getFileType(name) {
+      const ext = name?.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') return 'pdf';
+      if (['doc','docx'].includes(ext)) return 'word';
+      if (['jpg','jpeg','png','gif','webp'].includes(ext)) return 'image';
+      return 'other';
+    }
+
+    function getFileIcon(name) {
+      const type = getFileType(name);
+      if (type === 'pdf')   return '📄';
+      if (type === 'word')  return '📝';
+      if (type === 'image') return '🖼';
+      return '📎';
+    }
+
+    function formatSize(bytes) {
+      if (!bytes) return '—';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function filterByCase() {
+      caseFilter = document.getElementById('case-filter').value;
+      renderDocs();
+    }
+
+    function setTypeFilter(type, btn) {
+      typeFilter = type;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderDocs();
+    }
+
+    // Upload functions
+    function openUploadModal() {
+      document.getElementById('upload-modal').classList.add('open');
+    }
+
+    function closeUploadModal() {
+      document.getElementById('upload-modal').classList.remove('open');
+      selectedFile = null;
+      document.getElementById('selected-file').style.display = 'none';
+      document.getElementById('progress-bar').style.display = 'none';
+      document.getElementById('progress-fill').style.width = '0%';
+      document.getElementById('upload-msg').style.display = 'none';
+      document.getElementById('file-input').value = '';
+      document.getElementById('upload-case').value = '';
+    }
+
+    function dragOver(e) {
+      e.preventDefault();
+      document.getElementById('upload-zone').classList.add('dragover');
+    }
+
+    function dragLeave(e) {
+      document.getElementById('upload-zone').classList.remove('dragover');
+    }
+
+    function dropFile(e) {
+      e.preventDefault();
+      document.getElementById('upload-zone').classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) setSelectedFile(file);
+    }
+
+    function fileSelected(e) {
+      const file = e.target.files[0];
+      if (file) setSelectedFile(file);
+    }
+
+    function setSelectedFile(file) {
+      if (file.size > 10 * 1024 * 1024) {
+        showUploadMsg('File is too large. Maximum size is 10MB.', 'error');
+        return;
+      }
+      selectedFile = file;
+      document.getElementById('selected-name').textContent = file.name;
+      document.getElementById('selected-size').textContent = formatSize(file.size);
+      document.getElementById('selected-file').style.display = 'block';
+      document.getElementById('upload-msg').style.display = 'none';
+    }
+
+    async function uploadFile() {
+      const caseId = document.getElementById('upload-case').value;
+      const msg    = document.getElementById('upload-msg');
+
+      if (!caseId) { showUploadMsg('Please select a case.', 'error'); return; }
+      if (!selectedFile) { showUploadMsg('Please select a file to upload.', 'error'); return; }
+
+      const btn = document.getElementById('upload-submit');
+      btn.disabled = true;
+      btn.textContent = 'Uploading...';
+
+      // Show progress bar
+      const progressBar  = document.getElementById('progress-bar');
+      const progressFill = document.getElementById('progress-fill');
+      progressBar.style.display = 'block';
+      progressFill.style.width  = '30%';
+
+      // Create unique file path
+      const timestamp = Date.now();
+      const safeName  = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath  = `${currentProfile.firm_id}/${caseId}/${timestamp}_${safeName}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await client.storage
+        .from('documents')
+        .upload(filePath, selectedFile, { upsert: false });
+
+      if (uploadError) {
+        showUploadMsg('Upload failed: ' + uploadError.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Upload';
+        progressBar.style.display = 'none';
+        return;
+      }
+
+      progressFill.style.width = '70%';
+
+      // Save record to documents table
+      const { error: dbError } = await client.from('documents').insert({
+        case_id:     caseId,
+        uploaded_by: currentProfile.id,
+        file_name:   selectedFile.name,
+        file_path:   filePath,
+        file_size:   selectedFile.size,
+        file_type:   selectedFile.type,
+      });
+
+      if (dbError) {
+        showUploadMsg('File uploaded but record failed: ' + dbError.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Upload';
+        return;
+      }
+
+      progressFill.style.width = '100%';
+      showUploadMsg('Document uploaded successfully!', 'success');
+
+      btn.disabled = false;
+      btn.textContent = 'Upload';
+
+      // Reload documents and close modal after 1 second
+      await loadDocuments();
+      setTimeout(() => closeUploadModal(), 1000);
+    }
+
+    async function downloadDoc(docId, filePath, fileName) {
+      const { data, error } = await client.storage
+        .from('documents')
+        .createSignedUrl(filePath, 60); // URL valid for 60 seconds
+
+      if (error) { alert('Could not generate download link: ' + error.message); return; }
+
+      // Create a temporary link and click it
+      const a = document.createElement('a');
+      a.href     = data.signedUrl;
+      a.download = fileName;
+      a.target   = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    async function deleteDoc(docId, filePath) {
+      if (!confirm('Are you sure you want to delete this document? This cannot be undone.')) return;
+
+      // Delete from storage
+      await client.storage.from('documents').remove([filePath]);
+
+      // Delete from database
+      await client.from('documents').delete().eq('id', docId);
+
+      await loadDocuments();
+    }
+
+    function showUploadMsg(text, type) {
+      const el = document.getElementById('upload-msg');
+      el.textContent      = text;
+      el.style.display    = 'block';
+      el.style.background = type === 'error' ? '#FDEDED' : '#EDFAF3';
+      el.style.color      = type === 'error' ? '#8B1A1A' : '#1D6B3E';
+      el.style.border     = `1px solid ${type === 'error' ? 'rgba(139,26,26,0.2)' : 'rgba(29,107,62,0.2)'}`;
+    }
+
+    init();
+  </script>
+</body>
+</html>
