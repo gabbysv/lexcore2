@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Practice Areas — LexCore</title>
+  <link rel="stylesheet" href="../css/main.css" />
+  <style>
+    .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+    .area-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:16px; }
+    .area-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:12px; padding:24px; transition:box-shadow 0.15s; }
+    .area-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.08); }
+    .area-card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+    .area-name { font-size:1.05rem; font-weight:500; color:var(--color-text-primary); }
+    .area-desc { font-size:0.83rem; color:var(--color-text-muted); margin-bottom:16px; min-height:20px; }
+    .area-specialists { margin-bottom:16px; }
+    .area-specialists-label { font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--color-text-muted); margin-bottom:8px; }
+    .specialist-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; background:var(--color-accent-light); color:var(--color-accent); border-radius:99px; font-size:0.78rem; font-weight:500; margin:0 4px 4px 0; }
+    .specialist-pill button { background:none; border:none; cursor:pointer; color:var(--color-accent); font-size:0.9rem; padding:0; line-height:1; }
+    .area-actions { display:flex; gap:8px; }
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--color-surface); border-radius:12px; padding:32px; width:100%; max-width:520px; box-shadow:0 16px 48px rgba(0,0,0,0.2); max-height:90vh; overflow-y:auto; }
+    .modal h3 { margin-bottom:20px; }
+    .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:24px; }
+    .attorney-checkbox { display:flex; align-items:center; gap:10px; padding:10px 14px; border:1px solid var(--color-border); border-radius:8px; margin-bottom:8px; cursor:pointer; transition:background 0.15s; }
+    .attorney-checkbox:hover { background:var(--color-surface-alt); }
+    .attorney-checkbox input { width:16px; height:16px; cursor:pointer; accent-color:var(--color-accent); }
+    .attorney-checkbox label { cursor:pointer; font-size:0.9rem; flex:1; }
+    .attorney-checkbox .role-info { font-size:0.75rem; color:var(--color-text-muted); }
+    .stats-row { display:flex; gap:8px; margin-bottom:24px; flex-wrap:wrap; }
+    .stat-pill { padding:8px 16px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:99px; font-size:0.82rem; color:var(--color-text-secondary); }
+    .stat-pill strong { color:var(--color-accent); }
+    .empty-state { text-align:center; padding:60px 20px; color:var(--color-text-muted); grid-column:1/-1; }
+    .empty-state h3 { margin-bottom:8px; color:var(--color-text-secondary); }
+    .no-specialists { font-size:0.82rem; color:var(--color-text-muted); font-style:italic; }
+    .case-count-badge { display:inline-block; padding:2px 8px; background:var(--color-surface-alt); border:1px solid var(--color-border); border-radius:99px; font-size:0.72rem; color:var(--color-text-muted); }
+  </style>
+</head>
+<body class="auth-loading">
+  <div class="page-wrapper">
+    <div id="sidebar-container"></div>
+    <main class="main-content">
+
+      <div class="page-header">
+        <div>
+          <h1>Practice Areas</h1>
+          <p style="margin-top:4px;">Manage specialties and assign attorneys to each area</p>
+        </div>
+        <button class="btn btn-primary" onclick="openCreateModal()">+ Add Practice Area</button>
+      </div>
+
+      <!-- Quick stats -->
+      <div class="stats-row" id="stats-row"></div>
+
+      <!-- Practice areas grid -->
+      <div class="area-grid" id="areas-grid">
+        <p style="text-align:center;color:var(--color-text-muted);padding:40px;grid-column:1/-1;">Loading...</p>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Create Practice Area Modal -->
+  <div class="modal-overlay" id="create-modal">
+    <div class="modal">
+      <h3>Add Practice Area</h3>
+      <form id="create-form">
+        <div class="form-group">
+          <label>Practice Area Name *</label>
+          <input type="text" id="new-name" placeholder="e.g. Road Accident Fund (RAF)" required />
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <input type="text" id="new-desc" placeholder="Brief description (optional)" />
+        </div>
+        <div class="form-group">
+          <label>Assign Specialist Attorneys</label>
+          <div id="new-attorneys-list">
+            <p style="color:var(--color-text-muted);font-size:0.875rem;">Loading attorneys...</p>
+          </div>
+        </div>
+        <div id="create-msg" style="display:none;padding:10px 14px;border-radius:8px;font-size:0.9rem;margin-bottom:16px;"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('create-modal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Practice Area Modal -->
+  <div class="modal-overlay" id="edit-modal">
+    <div class="modal">
+      <h3>Edit Practice Area</h3>
+      <input type="hidden" id="edit-id" />
+      <div class="form-group">
+        <label>Practice Area Name *</label>
+        <input type="text" id="edit-name" required />
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <input type="text" id="edit-desc" placeholder="Brief description (optional)" />
+      </div>
+      <div class="form-group">
+        <label>Assign Specialist Attorneys</label>
+        <p style="font-size:0.78rem;color:var(--color-text-muted);margin-bottom:8px;">Check the attorneys who specialise in this area</p>
+        <div id="edit-attorneys-list">
+          <p style="color:var(--color-text-muted);font-size:0.875rem;">Loading attorneys...</p>
+        </div>
+      </div>
+      <div id="edit-msg" style="display:none;padding:10px 14px;border-radius:8px;font-size:0.9rem;margin-bottom:16px;"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('edit-modal')">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirm Modal -->
+  <div class="modal-overlay" id="delete-modal">
+    <div class="modal">
+      <h3>Delete Practice Area</h3>
+      <input type="hidden" id="delete-id" />
+      <p style="margin-bottom:16px;">Are you sure you want to delete <strong id="delete-name"></strong>?</p>
+      <p style="font-size:0.875rem;color:var(--color-text-muted);">This will remove the practice area from all cases and unassign all specialists. This cannot be undone.</p>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('delete-modal')">Cancel</button>
+        <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://hwsokdbbjjtiwscldbpr.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3c29rZGJiamp0aXdzY2xkYnByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTAzOTgsImV4cCI6MjA4OTA4NjM5OH0.PV-f9KCQzlPm5stTxFOSN4sVJDRKqZnqKnFZ6qHWECk';
+    const { createClient } = supabase;
+    const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentProfile  = null;
+    let practiceAreas   = [];
+    let attorneys       = [];
+    let userPracticeMap = {}; // practiceAreaId → [userId, ...]
+    let caseCounts      = {}; // practiceAreaId → count
+
+    async function signOut() {
+      await client.auth.signOut();
+      window.location.replace('/lexcore2/index.html');
+    }
+
+    async function init() {
+      const { data: { session } } = await client.auth.getSession();
+      if (!session) { window.location.replace('/lexcore2/index.html'); return; }
+
+      const { data: profile } = await client.from('profiles').select('*').eq('id', session.user.id).single();
+      if (!profile || profile.role !== 'admin') { window.location.replace('/lexcore2/index.html'); return; }
+
+      currentProfile = profile;
+      document.body.classList.remove('auth-loading');
+
+      buildSidebar(profile);
+      await Promise.all([loadPracticeAreas(), loadAttorneys()]);
+    }
+
+    function buildSidebar(profile) {
+      document.getElementById('sidebar-container').innerHTML = `
+        <aside class="sidebar">
+          <div class="sidebar-logo">LexCore<span>${profile.firm_name || 'Law Firm'}</span></div>
+          <nav class="sidebar-nav">
+            <a href="dashboard-admin.html">⊞ Dashboard</a>
+            <a href="cases.html">⊟ Cases</a>
+            <a href="documents.html">⊡ Documents</a>
+            <a href="messages.html">◷ Messages</a>
+            <a href="practice-areas.html" class="active">⊛ Practice Areas</a>
+          </nav>
+          <div class="sidebar-footer">
+            <strong>${profile.full_name || 'Admin'}</strong>
+            <span class="badge badge-admin" style="margin-top:6px;">admin</span><br/><br/>
+            <button onclick="signOut()" class="btn btn-secondary btn-sm" style="width:100%;margin-top:8px;">Sign out</button>
+          </div>
+        </aside>`;
+    }
+
+    async function loadPracticeAreas() {
+      const { data: areas } = await client.from('practice_areas')
+        .select('*')
+        .eq('firm_id', currentProfile.firm_id)
+        .order('name');
+      practiceAreas = areas || [];
+
+      // Load user_practice_areas
+      const { data: upa } = await client.from('user_practice_areas').select('*');
+      userPracticeMap = {};
+      (upa || []).forEach(row => {
+        if (!userPracticeMap[row.practice_area_id]) userPracticeMap[row.practice_area_id] = [];
+        userPracticeMap[row.practice_area_id].push(row.user_id);
+      });
+
+      // Load case counts per practice area
+      const { data: cases } = await client.from('cases')
+        .select('practice_area_id')
+        .eq('firm_id', currentProfile.firm_id);
+      caseCounts = {};
+      (cases || []).forEach(c => {
+        if (c.practice_area_id) {
+          caseCounts[c.practice_area_id] = (caseCounts[c.practice_area_id] || 0) + 1;
+        }
+      });
+
+      renderStats();
+      renderAreas();
+    }
+
+    async function loadAttorneys() {
+      const { data } = await client.from('profiles')
+        .select('id, full_name, job_title')
+        .eq('firm_id', currentProfile.firm_id)
+        .eq('role', 'attorney')
+        .order('full_name');
+      attorneys = data || [];
+    }
+
+    function renderStats() {
+      const totalAreas     = practiceAreas.length;
+      const totalSpecialists = new Set(Object.values(userPracticeMap).flat()).size;
+      const totalCases     = Object.values(caseCounts).reduce((a, b) => a + b, 0);
+
+      document.getElementById('stats-row').innerHTML = `
+        <div class="stat-pill"><strong>${totalAreas}</strong> practice areas</div>
+        <div class="stat-pill"><strong>${totalSpecialists}</strong> specialists assigned</div>
+        <div class="stat-pill"><strong>${totalCases}</strong> cases linked</div>
+        <div class="stat-pill"><strong>${attorneys.length}</strong> attorneys total</div>
+      `;
+    }
+
+    function renderAreas() {
+      const grid = document.getElementById('areas-grid');
+
+      if (!practiceAreas.length) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <h3>No practice areas yet</h3>
+            <p>Add your first practice area using the button above.</p>
+          </div>`;
+        return;
+      }
+
+      grid.innerHTML = practiceAreas.map(area => {
+        const specialistIds  = userPracticeMap[area.id] || [];
+        const specialists    = attorneys.filter(a => specialistIds.includes(a.id));
+        const caseCount      = caseCounts[area.id] || 0;
+
+        const specialistPills = specialists.length
+          ? specialists.map(a => `
+              <span class="specialist-pill">
+                ${a.full_name}
+                <button onclick="removeSpecialist('${area.id}', '${a.id}')" title="Remove specialist">✕</button>
+              </span>`).join('')
+          : `<span class="no-specialists">No specialists assigned</span>`;
+
+        return `
+          <div class="area-card">
+            <div class="area-card-header">
+              <div>
+                <div class="area-name">${area.name}</div>
+                ${caseCount > 0 ? `<span class="case-count-badge">${caseCount} case${caseCount !== 1 ? 's' : ''}</span>` : ''}
+              </div>
+            </div>
+            <div class="area-desc">${area.description || 'No description'}</div>
+            <div class="area-specialists">
+              <div class="area-specialists-label">Specialists</div>
+              ${specialistPills}
+            </div>
+            <div class="area-actions">
+              <button class="btn btn-secondary btn-sm" onclick="openEditModal('${area.id}')">Edit</button>
+              <button class="btn btn-secondary btn-sm" onclick="openDeleteModal('${area.id}', '${area.name}')">Delete</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function buildAttorneyCheckboxes(containerId, selectedIds = []) {
+      const container = document.getElementById(containerId);
+      if (!attorneys.length) {
+        container.innerHTML = '<p style="color:var(--color-text-muted);font-size:0.875rem;">No attorneys found. Add attorneys first.</p>';
+        return;
+      }
+      container.innerHTML = attorneys.map(a => `
+        <div class="attorney-checkbox">
+          <input type="checkbox" id="atty-${containerId}-${a.id}" value="${a.id}" ${selectedIds.includes(a.id) ? 'checked' : ''} />
+          <label for="atty-${containerId}-${a.id}">
+            ${a.full_name}
+            ${a.job_title ? `<span class="role-info"> — ${a.job_title}</span>` : ''}
+          </label>
+        </div>`).join('');
+    }
+
+    function getSelectedAttorneys(containerId) {
+      return Array.from(document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`))
+        .map(cb => cb.value);
+    }
+
+    // ── CREATE ──────────────────────────────────────────────
+    function openCreateModal() {
+      buildAttorneyCheckboxes('new-attorneys-list');
+      document.getElementById('create-modal').classList.add('open');
+    }
+
+    document.getElementById('create-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg  = document.getElementById('create-msg');
+      const name = document.getElementById('new-name').value.trim();
+      const desc = document.getElementById('new-desc').value.trim();
+
+      if (!name) { showMsg(msg, 'Please enter a name.', 'error'); return; }
+
+      // Create practice area
+      const { data: area, error } = await client.from('practice_areas').insert({
+        firm_id:     currentProfile.firm_id,
+        name,
+        description: desc || null,
+      }).select().single();
+
+      if (error) { showMsg(msg, 'Error: ' + error.message, 'error'); return; }
+
+      // Assign selected specialists
+      const selectedIds = getSelectedAttorneys('new-attorneys-list');
+      if (selectedIds.length) {
+        await client.from('user_practice_areas').insert(
+          selectedIds.map(userId => ({ user_id: userId, practice_area_id: area.id }))
+        );
+      }
+
+      showMsg(msg, 'Practice area created!', 'success');
+      document.getElementById('create-form').reset();
+      setTimeout(() => closeModal('create-modal'), 800);
+      await loadPracticeAreas();
+    });
+
+    // ── EDIT ────────────────────────────────────────────────
+    async function openEditModal(areaId) {
+      const area       = practiceAreas.find(a => a.id === areaId);
+      const specialists = userPracticeMap[areaId] || [];
+
+      document.getElementById('edit-id').value   = areaId;
+      document.getElementById('edit-name').value = area.name;
+      document.getElementById('edit-desc').value = area.description || '';
+
+      buildAttorneyCheckboxes('edit-attorneys-list', specialists);
+      document.getElementById('edit-modal').classList.add('open');
+    }
+
+    async function saveEdit() {
+      const msg    = document.getElementById('edit-msg');
+      const areaId = document.getElementById('edit-id').value;
+      const name   = document.getElementById('edit-name').value.trim();
+      const desc   = document.getElementById('edit-desc').value.trim();
+
+      if (!name) { showMsg(msg, 'Please enter a name.', 'error'); return; }
+
+      // Update practice area
+      const { error } = await client.from('practice_areas').update({
+        name,
+        description: desc || null,
+      }).eq('id', areaId);
+
+      if (error) { showMsg(msg, 'Error: ' + error.message, 'error'); return; }
+
+      // Update specialists — delete old, insert new
+      await client.from('user_practice_areas').delete().eq('practice_area_id', areaId);
+
+      const selectedIds = getSelectedAttorneys('edit-attorneys-list');
+      if (selectedIds.length) {
+        await client.from('user_practice_areas').insert(
+          selectedIds.map(userId => ({ user_id: userId, practice_area_id: areaId }))
+        );
+      }
+
+      showMsg(msg, 'Practice area updated!', 'success');
+      setTimeout(() => closeModal('edit-modal'), 800);
+      await loadPracticeAreas();
+    }
+
+    // ── REMOVE SPECIALIST (quick action on card) ─────────────
+    async function removeSpecialist(areaId, userId) {
+      await client.from('user_practice_areas')
+        .delete()
+        .eq('practice_area_id', areaId)
+        .eq('user_id', userId);
+      await loadPracticeAreas();
+    }
+
+    // ── DELETE ──────────────────────────────────────────────
+    function openDeleteModal(areaId, areaName) {
+      document.getElementById('delete-id').value       = areaId;
+      document.getElementById('delete-name').textContent = areaName;
+      document.getElementById('delete-modal').classList.add('open');
+    }
+
+    async function confirmDelete() {
+      const areaId = document.getElementById('delete-id').value;
+
+      // Remove all specialist links first
+      await client.from('user_practice_areas').delete().eq('practice_area_id', areaId);
+
+      // Remove from cases
+      await client.from('cases').update({ practice_area_id: null }).eq('practice_area_id', areaId);
+
+      // Delete the practice area
+      await client.from('practice_areas').delete().eq('id', areaId);
+
+      closeModal('delete-modal');
+      await loadPracticeAreas();
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+
+    function showMsg(el, text, type) {
+      el.textContent      = text;
+      el.style.display    = 'block';
+      el.style.background = type === 'error' ? '#FDEDED' : '#EDFAF3';
+      el.style.color      = type === 'error' ? '#8B1A1A' : '#1D6B3E';
+      el.style.border     = `1px solid ${type === 'error' ? 'rgba(139,26,26,0.2)' : 'rgba(29,107,62,0.2)'}`;
+    }
+
+    init();
+  </script>
+</body>
+</html>
