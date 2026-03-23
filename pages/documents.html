@@ -338,33 +338,19 @@
         document.getElementById('ai-progress').style.width = progress + '%';
       }, 400);
 
-      try {
-        // Force refresh session to get a fresh token
-        const { data: refreshData, error: refreshError } = await client.auth.refreshSession();
-
-        // Fall back to getSession if refresh fails
-        let accessToken;
-        if (refreshError || !refreshData?.session) {
-          const { data: { session } } = await client.auth.getSession();
-          if (!session) throw new Error('Not authenticated. Please log in again.');
-          accessToken = session.access_token;
-        } else {
-          accessToken = refreshData.session.access_token;
-        }
-
-        const response = await fetch(
-          `${SUPABASE_URL}/functions/v1/analyze-document`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type':  'application/json',
-              'Authorization': `Bearer ${accessToken}`,
-              'apikey':        SUPABASE_ANON_KEY,
-            },
-            body: JSON.stringify({ document_id: docId }),
-          }
-        );
-
+     try {
+  const response = await fetch(
+    `${SUPABASE_URL}/functions/v1/analyze-document`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey':        SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ document_id: docId }),
+    }
+  );
         clearInterval(aiProgressTimer);
         document.getElementById('ai-progress').style.width = '100%';
 
