@@ -20,7 +20,6 @@
     .doc-actions { display:flex; gap:6px; flex-wrap:wrap; }
     .ai-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; background:#EAF3FB; color:#0F4C75; border-radius:99px; font-size:0.7rem; font-weight:500; margin-bottom:8px; }
     .ai-badge.done { background:#EDFAF3; color:#1D6B3E; }
-    .ai-badge.analyzing { background:#FFF8EC; color:#7A4F00; }
     .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; align-items:center; justify-content:center; padding:20px; }
     .modal-overlay.open { display:flex; }
     .modal { background:var(--color-surface); border-radius:12px; padding:32px; width:100%; max-width:640px; box-shadow:0 16px 48px rgba(0,0,0,0.2); max-height:90vh; overflow-y:auto; }
@@ -37,17 +36,14 @@
     .empty-state { text-align:center; padding:60px 20px; color:var(--color-text-muted); grid-column:1/-1; }
     .empty-state h3 { margin-bottom:8px; color:var(--color-text-secondary); }
     .case-select { padding:9px 14px; border:1px solid var(--color-border-dark); border-radius:8px; font-family:inherit; font-size:0.9rem; }
-    .case-select:focus { outline:none; border-color:var(--color-accent); }
-
-    /* AI Analysis styles */
     .analysis-section { margin-bottom:20px; }
     .analysis-section h4 { font-size:0.85rem; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--color-text-muted); margin-bottom:8px; }
     .analysis-summary { font-size:0.9rem; line-height:1.7; color:var(--color-text-primary); background:var(--color-surface-alt); padding:14px; border-radius:8px; }
     .analysis-list { list-style:none; padding:0; }
     .analysis-list li { padding:7px 12px; font-size:0.875rem; border-radius:6px; margin-bottom:6px; display:flex; align-items:flex-start; gap:8px; }
     .analysis-list li::before { content:''; width:6px; height:6px; border-radius:50%; flex-shrink:0; margin-top:6px; }
-    .key-points-list li { background:var(--color-accent-light); color:var(--color-accent); }
-    .key-points-list li::before { background:var(--color-accent); }
+    .key-points-list li { background:#EAF3FB; color:#0F4C75; }
+    .key-points-list li::before { background:#0F4C75; }
     .risk-flags-list li { background:#FDE8E8; color:#7A1F1F; }
     .risk-flags-list li::before { background:#E24B4A; }
     .action-items-list li { background:#EDFAF3; color:#1D6B3E; }
@@ -57,8 +53,11 @@
     .sentiment-neutral  { background:#F0EDE8; color:#5C3A10; }
     .sentiment-negative { background:#FDE8E8; color:#7A1F1F; }
     .sentiment-urgent   { background:#FFF8EC; color:#7A4F00; }
-    .analyzing-spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(0,0,0,0.1); border-top-color:currentColor; border-radius:50%; animation:spin 0.8s linear infinite; }
-    @keyframes spin { to { transform:rotate(360deg); } }
+    .risk-level-badge { display:inline-block; padding:4px 12px; border-radius:99px; font-size:0.78rem; font-weight:600; margin-left:8px; }
+    .risk-critical { background:#FDEDED; color:#8B1A1A; }
+    .risk-high     { background:#FFF0DB; color:#7A4F00; }
+    .risk-medium   { background:#FFFBE6; color:#7A6000; }
+    .risk-low      { background:#EDFAF3; color:#1D6B3E; }
   </style>
 </head>
 <body class="auth-loading">
@@ -99,11 +98,9 @@
       <h3>Upload Document</h3>
       <div class="form-group">
         <label>Link to Case *</label>
-        <select id="upload-case" class="case-select" style="width:100%;">
-          <option value="">Select a case...</option>
-        </select>
+        <select id="upload-case" class="case-select" style="width:100%;"><option value="">Select a case...</option></select>
       </div>
-      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()" ondragover="dragOver(event)" ondragleave="dragLeave()" ondrop="dropFile(event)">
         <input type="file" id="file-input" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt" onchange="fileSelected(event)" />
         <div style="font-size:36px;margin-bottom:12px;">📎</div>
         <h4>Click to browse or drag & drop</h4>
@@ -113,9 +110,7 @@
         <strong id="selected-name"></strong>
         <span id="selected-size" style="color:var(--color-text-muted);margin-left:8px;"></span>
       </div>
-      <div class="progress-bar" id="progress-bar">
-        <div class="progress-fill" id="progress-fill"></div>
-      </div>
+      <div class="progress-bar" id="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
       <div id="upload-msg" style="display:none;padding:10px 14px;border-radius:8px;font-size:0.9rem;margin-top:12px;"></div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
@@ -132,7 +127,10 @@
           <h3 style="margin-bottom:4px;">AI Analysis</h3>
           <p id="analysis-doc-name" style="font-size:0.82rem;color:var(--color-text-muted);"></p>
         </div>
-        <span id="analysis-sentiment-badge" class="sentiment-badge"></span>
+        <div>
+          <span id="analysis-sentiment-badge" class="sentiment-badge"></span>
+          <span id="analysis-risk-badge" class="risk-level-badge"></span>
+        </div>
       </div>
 
       <div id="analysis-loading" style="text-align:center;padding:40px;">
@@ -145,32 +143,26 @@
       </div>
 
       <div id="analysis-content" style="display:none;">
-
         <div class="analysis-section">
           <h4>Summary</h4>
           <div class="analysis-summary" id="analysis-summary"></div>
         </div>
-
         <div class="analysis-section">
           <h4>Document type</h4>
           <span id="analysis-doc-type" class="badge badge-attorney"></span>
         </div>
-
         <div class="analysis-section" id="key-points-section">
           <h4>Key points</h4>
           <ul class="analysis-list key-points-list" id="analysis-key-points"></ul>
         </div>
-
         <div class="analysis-section" id="risk-flags-section">
           <h4>⚠ Risk flags</h4>
           <ul class="analysis-list risk-flags-list" id="analysis-risk-flags"></ul>
         </div>
-
         <div class="analysis-section" id="action-items-section">
           <h4>Action items</h4>
           <ul class="analysis-list action-items-list" id="analysis-action-items"></ul>
         </div>
-
       </div>
 
       <div id="analysis-error" style="display:none;padding:14px;background:#FDE8E8;color:#7A1F1F;border-radius:8px;font-size:0.875rem;"></div>
@@ -184,7 +176,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const SUPABASE_URL = 'https://hwsokdbbjjtiwscldbpr.supabase.co';
+    const SUPABASE_URL      = 'https://hwsokdbbjjtiwscldbpr.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3c29rZGJiamp0aXdzY2xkYnByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTAzOTgsImV4cCI6MjA4OTA4NjM5OH0.PV-f9KCQzlPm5stTxFOSN4sVJDRKqZnqKnFZ6qHWECk';
     const { createClient } = supabase;
     const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -206,17 +198,13 @@
     async function init() {
       const { data: { session } } = await client.auth.getSession();
       if (!session) { window.location.replace('/lexcore2/index.html'); return; }
-
       const { data: profile } = await client.from('profiles').select('*').eq('id', session.user.id).single();
       if (!profile) { window.location.replace('/lexcore2/index.html'); return; }
-
       currentProfile = profile;
       document.body.classList.remove('auth-loading');
-
-      if (['admin', 'attorney', 'staff'].includes(profile.role)) {
+      if (['admin','attorney','staff'].includes(profile.role)) {
         document.getElementById('upload-btn').style.display = 'inline-flex';
       }
-
       buildSidebar(profile);
       await Promise.all([loadCases(), loadDocuments()]);
     }
@@ -228,15 +216,14 @@
         staff:    [['dashboard-staff.html','⊞ Dashboard'],['cases.html','⊟ Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
         client:   [['dashboard-client.html','⊞ Dashboard'],['cases.html','⊟ My Case'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
       };
-      const links = (navMap[profile.role] || []).map(([href, label]) =>
-        `<a href="${href}" class="${href === 'documents.html' ? 'active' : ''}">${label}</a>`
-      ).join('');
+      const links = (navMap[profile.role]||[]).map(([href,label]) =>
+        `<a href="${href}" class="${href==='documents.html'?'active':''}">${label}</a>`).join('');
       document.getElementById('sidebar-container').innerHTML = `
         <aside class="sidebar">
-          <div class="sidebar-logo">LexCore<span>${profile.firm_name || 'Law Firm'}</span></div>
+          <div class="sidebar-logo">LexCore<span>${profile.firm_name||'Law Firm'}</span></div>
           <nav class="sidebar-nav">${links}</nav>
           <div class="sidebar-footer">
-            <strong>${profile.full_name || 'User'}</strong>
+            <strong>${profile.full_name||'User'}</strong>
             <span class="badge badge-${profile.role}" style="margin-top:6px;">${profile.role}</span><br/><br/>
             <button onclick="signOut()" class="btn btn-secondary btn-sm" style="width:100%;margin-top:8px;">Sign out</button>
           </div>
@@ -244,64 +231,55 @@
     }
 
     async function loadCases() {
-      let query = client.from('cases').select('id, title').order('title');
-      if (currentProfile.role === 'attorney') query = query.eq('attorney_id', currentProfile.id);
-      else if (currentProfile.role === 'client') query = query.eq('client_id', currentProfile.id);
-      else query = query.eq('firm_id', currentProfile.firm_id);
-
+      let query = client.from('cases').select('id,title').order('title');
+      if (currentProfile.role==='attorney') query=query.eq('attorney_id',currentProfile.id);
+      else if (currentProfile.role==='client') query=query.eq('client_id',currentProfile.id);
+      else query=query.eq('firm_id',currentProfile.firm_id);
       const { data } = await query;
-      allCases = data || [];
-
-      const opts = allCases.map(c => `<option value="${c.id}">${c.title}</option>`).join('');
-      document.getElementById('case-filter').innerHTML = '<option value="all">All cases</option>' + opts;
-      document.getElementById('upload-case').innerHTML = '<option value="">Select a case...</option>' + opts;
+      allCases = data||[];
+      const opts = allCases.map(c=>`<option value="${c.id}">${c.title}</option>`).join('');
+      document.getElementById('case-filter').innerHTML  = '<option value="all">All cases</option>'+opts;
+      document.getElementById('upload-case').innerHTML  = '<option value="">Select a case...</option>'+opts;
     }
 
     async function loadDocuments() {
       const { data } = await client.from('documents')
         .select('*, case:cases(id,title), uploader:profiles!documents_uploaded_by_fkey(full_name), ai_analysis:ai_analyses(id,summary,key_points,risk_flags,raw_response)')
-        .order('uploaded_at', { ascending: false });
-
-      allDocs = (data || []).filter(d => d.case !== null);
+        .order('uploaded_at',{ascending:false});
+      allDocs = (data||[]).filter(d=>d.case!==null);
       renderDocs();
     }
 
     function renderDocs() {
       let filtered = allDocs;
-      if (caseFilter !== 'all') filtered = filtered.filter(d => d.case_id === caseFilter);
-      if (typeFilter !== 'all') filtered = filtered.filter(d => getFileType(d.file_name) === typeFilter);
-
-      document.getElementById('doc-count').textContent = `${filtered.length} document${filtered.length !== 1 ? 's' : ''}`;
-
+      if (caseFilter!=='all') filtered=filtered.filter(d=>d.case_id===caseFilter);
+      if (typeFilter!=='all') filtered=filtered.filter(d=>getFileType(d.file_name)===typeFilter);
+      document.getElementById('doc-count').textContent = `${filtered.length} document${filtered.length!==1?'s':''}`;
       const grid = document.getElementById('docs-grid');
       if (!filtered.length) {
-        grid.innerHTML = `<div class="empty-state"><h3>No documents found</h3><p>${allDocs.length === 0 ? 'Upload your first document.' : 'Try a different filter.'}</p></div>`;
+        grid.innerHTML=`<div class="empty-state"><h3>No documents found</h3><p>${allDocs.length===0?'Upload your first document.':'Try a different filter.'}</p></div>`;
         return;
       }
-
+      const canAnalyze = ['admin','attorney','staff'].includes(currentProfile.role);
       grid.innerHTML = filtered.map(doc => {
         const hasAnalysis = doc.ai_analysis && doc.ai_analysis.length > 0;
-        const canAnalyze  = ['admin','attorney','staff'].includes(currentProfile.role);
-        const fileType    = getFileType(doc.file_name);
-
         return `
           <div class="doc-card">
-            <div class="doc-icon ${fileType}">${getFileIcon(doc.file_name)}</div>
+            <div class="doc-icon ${getFileType(doc.file_name)}">${getFileIcon(doc.file_name)}</div>
             ${hasAnalysis
               ? `<div class="ai-badge done">✓ AI Analysed</div>`
-              : canAnalyze ? `<div class="ai-badge">🤖 Not yet analysed</div>` : ''
-            }
+              : canAnalyze ? `<div class="ai-badge">🤖 Not yet analysed</div>` : ''}
             <div class="doc-name">${doc.file_name}</div>
             <div class="doc-meta">
-              📁 ${doc.case?.title || '—'}<br/>
-              👤 ${doc.uploader?.full_name || '—'}<br/>
+              📁 ${doc.case?.title||'—'}<br/>
+              👤 ${doc.uploader?.full_name||'—'}<br/>
               📅 ${new Date(doc.uploaded_at).toLocaleDateString()}<br/>
               💾 ${formatSize(doc.file_size)}
             </div>
             <div class="doc-actions">
-              <button class="btn btn-primary btn-sm" onclick="downloadDoc('${doc.id}', '${doc.file_path}', '${doc.file_name}')">↓ Download</button>
-              ${canAnalyze ? `<button class="btn btn-secondary btn-sm" onclick="openAnalysis('${doc.id}', '${doc.file_name}', ${hasAnalysis})" style="background:#EAF3FB;color:#0F4C75;border-color:#B5D4F4;">🤖 ${hasAnalysis ? 'View AI' : 'Analyse'}</button>` : ''}
-              ${canAnalyze ? `<button class="btn btn-secondary btn-sm" onclick="deleteDoc('${doc.id}', '${doc.file_path}')">✕</button>` : ''}
+              <button class="btn btn-primary btn-sm" onclick="downloadDoc('${doc.file_path}','${doc.file_name}')">↓ Download</button>
+              ${canAnalyze ? `<button class="btn btn-secondary btn-sm" onclick="openAnalysis('${doc.id}','${doc.file_name.replace(/'/g,"\\'")}',${hasAnalysis})" style="background:#EAF3FB;color:#0F4C75;border-color:#B5D4F4;">🤖 ${hasAnalysis?'View AI':'Analyse'}</button>` : ''}
+              ${canAnalyze ? `<button class="btn btn-secondary btn-sm" onclick="deleteDoc('${doc.id}','${doc.file_path}')">✕</button>` : ''}
             </div>
           </div>`;
       }).join('');
@@ -310,67 +288,61 @@
     // ── AI ANALYSIS ─────────────────────────────────────────
     async function openAnalysis(docId, docName, hasExisting) {
       currentDocId = docId;
-      document.getElementById('analysis-doc-name').textContent = docName;
+      document.getElementById('analysis-doc-name').textContent    = docName;
       document.getElementById('analysis-modal').classList.add('open');
-      document.getElementById('analysis-content').style.display  = 'none';
-      document.getElementById('analysis-error').style.display    = 'none';
+      document.getElementById('analysis-content').style.display   = 'none';
+      document.getElementById('analysis-error').style.display     = 'none';
       document.getElementById('analysis-sentiment-badge').textContent = '';
-      document.getElementById('reanalyze-btn').style.display = 'none';
+      document.getElementById('analysis-risk-badge').textContent  = '';
+      document.getElementById('reanalyze-btn').style.display      = 'none';
+      document.getElementById('ai-progress').style.width          = '0%';
 
       if (hasExisting) {
-        // Load existing analysis from database
+        document.getElementById('analysis-loading').style.display = 'none';
         await loadExistingAnalysis(docId);
       } else {
-        // Run new analysis
+        document.getElementById('analysis-loading').style.display = 'block';
         await runAnalysis(docId);
       }
     }
 
     async function loadExistingAnalysis(docId) {
-      document.getElementById('analysis-loading').style.display = 'none';
-
-      const { data } = await client.from('ai_analyses')
-        .select('*')
-        .eq('document_id', docId)
-        .single();
-
-      if (!data) {
-        await runAnalysis(docId);
-        return;
-      }
-
+      const { data } = await client.from('ai_analyses').select('*').eq('document_id', docId).single();
+      if (!data) { await runAnalysis(docId); return; }
       let analysis;
-      try {
-        analysis = JSON.parse(data.raw_response);
-      } catch {
+      try { analysis = JSON.parse(data.raw_response); }
+      catch {
         analysis = {
-          summary:      data.summary,
-          key_points:   JSON.parse(data.key_points || '[]'),
-          risk_flags:   JSON.parse(data.risk_flags  || '[]'),
-          action_items: [],
+          summary:       data.summary,
+          key_points:    JSON.parse(data.key_points||'[]'),
+          risk_flags:    JSON.parse(data.risk_flags||'[]'),
+          action_items:  [],
           document_type: 'Legal Document',
-          sentiment:    'neutral'
+          sentiment:     'neutral',
+          risk_level:    'low'
         };
       }
-
       displayAnalysis(analysis);
       document.getElementById('reanalyze-btn').style.display = 'inline-flex';
     }
 
     async function runAnalysis(docId) {
-      document.getElementById('analysis-loading').style.display = 'block';
-      document.getElementById('analysis-content').style.display = 'none';
-      document.getElementById('analysis-error').style.display   = 'none';
+      document.getElementById('analysis-loading').style.display  = 'block';
+      document.getElementById('analysis-content').style.display  = 'none';
+      document.getElementById('analysis-error').style.display    = 'none';
 
-      // Animate progress bar
+      // Animate progress
       let progress = 0;
+      clearInterval(aiProgressTimer);
       aiProgressTimer = setInterval(() => {
-        progress = Math.min(progress + 3, 90);
+        progress = Math.min(progress + 2, 85);
         document.getElementById('ai-progress').style.width = progress + '%';
-      }, 500);
+      }, 400);
 
       try {
+        // Get fresh session token
         const { data: { session } } = await client.auth.getSession();
+        if (!session) throw new Error('Not authenticated');
 
         const response = await fetch(
           `${SUPABASE_URL}/functions/v1/analyze-document`,
@@ -391,205 +363,161 @@
         const result = await response.json();
 
         if (!response.ok || result.error) {
-          throw new Error(result.error || 'Analysis failed');
+          throw new Error(result.error || `HTTP ${response.status}`);
         }
 
         setTimeout(() => {
           document.getElementById('analysis-loading').style.display = 'none';
           displayAnalysis(result.analysis);
           document.getElementById('reanalyze-btn').style.display = 'inline-flex';
-          // Reload docs to show AI badge
           loadDocuments();
-        }, 500);
+        }, 400);
 
       } catch (err) {
         clearInterval(aiProgressTimer);
         document.getElementById('analysis-loading').style.display = 'none';
         const errEl = document.getElementById('analysis-error');
-        errEl.textContent  = 'Analysis failed: ' + err.message;
+        errEl.textContent   = 'Analysis failed: ' + err.message;
         errEl.style.display = 'block';
       }
     }
 
     function displayAnalysis(analysis) {
-      document.getElementById('analysis-content').style.display = 'block';
-      document.getElementById('analysis-loading').style.display = 'none';
+      document.getElementById('analysis-content').style.display  = 'block';
+      document.getElementById('analysis-loading').style.display  = 'none';
+      document.getElementById('analysis-summary').textContent    = analysis.summary || 'No summary available.';
+      document.getElementById('analysis-doc-type').textContent   = analysis.document_type || 'Legal Document';
 
-      // Summary
-      document.getElementById('analysis-summary').textContent = analysis.summary || 'No summary available.';
-
-      // Document type
-      document.getElementById('analysis-doc-type').textContent = analysis.document_type || 'Legal Document';
-
-      // Sentiment badge
-      const sentiment = analysis.sentiment || 'neutral';
-      const sentBadge = document.getElementById('analysis-sentiment-badge');
+      // Sentiment
+      const sentiment  = analysis.sentiment || 'neutral';
+      const sentBadge  = document.getElementById('analysis-sentiment-badge');
       sentBadge.textContent = sentiment.charAt(0).toUpperCase() + sentiment.slice(1);
       sentBadge.className   = `sentiment-badge sentiment-${sentiment}`;
 
+      // Risk level
+      const riskLevel  = analysis.risk_level || 'low';
+      const riskLabels = { critical:'🔴 Critical', high:'🟠 High', medium:'🟡 Medium', low:'🟢 Low' };
+      const riskBadge  = document.getElementById('analysis-risk-badge');
+      riskBadge.textContent = riskLabels[riskLevel] || '🟢 Low';
+      riskBadge.className   = `risk-level-badge risk-${riskLevel}`;
+
       // Key points
-      const keyPoints = Array.isArray(analysis.key_points)
-        ? analysis.key_points
-        : JSON.parse(analysis.key_points || '[]');
+      const kp = Array.isArray(analysis.key_points) ? analysis.key_points : JSON.parse(analysis.key_points||'[]');
       const kpSection = document.getElementById('key-points-section');
-      if (keyPoints.length) {
-        document.getElementById('analysis-key-points').innerHTML = keyPoints.map(p => `<li>${p}</li>`).join('');
-        kpSection.style.display = 'block';
-      } else {
-        kpSection.style.display = 'none';
-      }
+      if (kp.length) { document.getElementById('analysis-key-points').innerHTML = kp.map(p=>`<li>${p}</li>`).join(''); kpSection.style.display='block'; }
+      else kpSection.style.display='none';
 
       // Risk flags
-      const riskFlags = Array.isArray(analysis.risk_flags)
-        ? analysis.risk_flags
-        : JSON.parse(analysis.risk_flags || '[]');
+      const rf = Array.isArray(analysis.risk_flags) ? analysis.risk_flags : JSON.parse(analysis.risk_flags||'[]');
       const rfSection = document.getElementById('risk-flags-section');
-      if (riskFlags.length) {
-        document.getElementById('analysis-risk-flags').innerHTML = riskFlags.map(r => `<li>${r}</li>`).join('');
-        rfSection.style.display = 'block';
-      } else {
-        rfSection.style.display = 'none';
-      }
+      if (rf.length) { document.getElementById('analysis-risk-flags').innerHTML = rf.map(r=>`<li>${r}</li>`).join(''); rfSection.style.display='block'; }
+      else rfSection.style.display='none';
 
       // Action items
-      const actionItems = Array.isArray(analysis.action_items)
-        ? analysis.action_items
-        : JSON.parse(analysis.action_items || '[]');
+      const ai = Array.isArray(analysis.action_items) ? analysis.action_items : JSON.parse(analysis.action_items||'[]');
       const aiSection = document.getElementById('action-items-section');
-      if (actionItems.length) {
-        document.getElementById('analysis-action-items').innerHTML = actionItems.map(a => `<li>${a}</li>`).join('');
-        aiSection.style.display = 'block';
-      } else {
-        aiSection.style.display = 'none';
-      }
+      if (ai.length) { document.getElementById('analysis-action-items').innerHTML = ai.map(a=>`<li>${a}</li>`).join(''); aiSection.style.display='block'; }
+      else aiSection.style.display='none';
     }
 
     async function reanalyzeDocument() {
-      document.getElementById('reanalyze-btn').style.display   = 'none';
+      document.getElementById('reanalyze-btn').style.display    = 'none';
       document.getElementById('analysis-content').style.display = 'none';
-      document.getElementById('ai-progress').style.width       = '0%';
+      document.getElementById('ai-progress').style.width        = '0%';
+      document.getElementById('analysis-loading').style.display = 'block';
       await runAnalysis(currentDocId);
     }
 
     // ── UPLOAD ───────────────────────────────────────────────
     function openUploadModal() { document.getElementById('upload-modal').classList.add('open'); }
-
     function closeUploadModal() {
       document.getElementById('upload-modal').classList.remove('open');
       selectedFile = null;
-      document.getElementById('selected-file').style.display   = 'none';
-      document.getElementById('progress-bar').style.display    = 'none';
-      document.getElementById('progress-fill').style.width     = '0%';
-      document.getElementById('upload-msg').style.display      = 'none';
-      document.getElementById('file-input').value              = '';
-      document.getElementById('upload-case').value             = '';
-    }
-
-    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-
-    function dragOver(e) { e.preventDefault(); document.getElementById('upload-zone').classList.add('dragover'); }
-    function dragLeave()  { document.getElementById('upload-zone').classList.remove('dragover'); }
-    function dropFile(e)  { e.preventDefault(); dragLeave(); const f = e.dataTransfer.files[0]; if (f) setSelectedFile(f); }
-    function fileSelected(e) { const f = e.target.files[0]; if (f) setSelectedFile(f); }
-
-    function setSelectedFile(file) {
-      if (file.size > 10 * 1024 * 1024) { showUploadMsg('File too large. Max 10MB.', 'error'); return; }
-      selectedFile = file;
-      document.getElementById('selected-name').textContent    = file.name;
-      document.getElementById('selected-size').textContent    = formatSize(file.size);
-      document.getElementById('selected-file').style.display  = 'block';
+      document.getElementById('selected-file').style.display  = 'none';
+      document.getElementById('progress-bar').style.display   = 'none';
+      document.getElementById('progress-fill').style.width    = '0%';
       document.getElementById('upload-msg').style.display     = 'none';
+      document.getElementById('file-input').value             = '';
+      document.getElementById('upload-case').value            = '';
     }
-
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+    function dragOver(e)  { e.preventDefault(); document.getElementById('upload-zone').classList.add('dragover'); }
+    function dragLeave()  { document.getElementById('upload-zone').classList.remove('dragover'); }
+    function dropFile(e)  { e.preventDefault(); dragLeave(); const f=e.dataTransfer.files[0]; if(f) setSelectedFile(f); }
+    function fileSelected(e) { const f=e.target.files[0]; if(f) setSelectedFile(f); }
+    function setSelectedFile(file) {
+      if (file.size > 10*1024*1024) { showUploadMsg('File too large. Max 10MB.','error'); return; }
+      selectedFile = file;
+      document.getElementById('selected-name').textContent   = file.name;
+      document.getElementById('selected-size').textContent   = formatSize(file.size);
+      document.getElementById('selected-file').style.display = 'block';
+      document.getElementById('upload-msg').style.display    = 'none';
+    }
     async function uploadFile() {
       const caseId = document.getElementById('upload-case').value;
-      if (!caseId)       { showUploadMsg('Please select a case.', 'error'); return; }
-      if (!selectedFile) { showUploadMsg('Please select a file.', 'error'); return; }
-
+      if (!caseId)       { showUploadMsg('Please select a case.','error'); return; }
+      if (!selectedFile) { showUploadMsg('Please select a file.','error'); return; }
       const btn = document.getElementById('upload-submit');
-      btn.disabled = true; btn.textContent = 'Uploading...';
-
-      const progressBar  = document.getElementById('progress-bar');
-      const progressFill = document.getElementById('progress-fill');
-      progressBar.style.display = 'block';
-      progressFill.style.width  = '30%';
-
-      const timestamp = Date.now();
-      const safeName  = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const filePath  = `${currentProfile.firm_id}/${caseId}/${timestamp}_${safeName}`;
-
-      const { error: uploadError } = await client.storage.from('documents').upload(filePath, selectedFile, { upsert: false });
-
-      if (uploadError) {
-        showUploadMsg('Upload failed: ' + uploadError.message, 'error');
-        btn.disabled = false; btn.textContent = 'Upload';
-        progressBar.style.display = 'none';
-        return;
-      }
-
-      progressFill.style.width = '70%';
-
-      const { error: dbError } = await client.from('documents').insert({
-        case_id: caseId, uploaded_by: currentProfile.id,
-        file_name: selectedFile.name, file_path: filePath,
-        file_size: selectedFile.size, file_type: selectedFile.type,
+      btn.disabled=true; btn.textContent='Uploading...';
+      const pb = document.getElementById('progress-bar');
+      const pf = document.getElementById('progress-fill');
+      pb.style.display='block'; pf.style.width='30%';
+      const ts       = Date.now();
+      const safeName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const filePath = `${currentProfile.firm_id}/${caseId}/${ts}_${safeName}`;
+      const { error: ue } = await client.storage.from('documents').upload(filePath,selectedFile,{upsert:false});
+      if (ue) { showUploadMsg('Upload failed: '+ue.message,'error'); btn.disabled=false; btn.textContent='Upload'; pb.style.display='none'; return; }
+      pf.style.width='70%';
+      const { error: de } = await client.from('documents').insert({
+        case_id:caseId, uploaded_by:currentProfile.id,
+        file_name:selectedFile.name, file_path:filePath,
+        file_size:selectedFile.size, file_type:selectedFile.type,
       });
-
-      if (dbError) { showUploadMsg('DB error: ' + dbError.message, 'error'); btn.disabled = false; btn.textContent = 'Upload'; return; }
-
-      progressFill.style.width = '100%';
-      showUploadMsg('Uploaded successfully!', 'success');
-      btn.disabled = false; btn.textContent = 'Upload';
+      if (de) { showUploadMsg('DB error: '+de.message,'error'); btn.disabled=false; btn.textContent='Upload'; return; }
+      pf.style.width='100%';
+      showUploadMsg('Uploaded successfully!','success');
+      btn.disabled=false; btn.textContent='Upload';
       await loadDocuments();
-      setTimeout(() => closeUploadModal(), 800);
+      setTimeout(()=>closeUploadModal(),800);
     }
-
-    async function downloadDoc(docId, filePath, fileName) {
-      const { data, error } = await client.storage.from('documents').createSignedUrl(filePath, 60);
-      if (error) { alert('Download error: ' + error.message); return; }
-      const a = document.createElement('a');
-      a.href = data.signedUrl; a.download = fileName; a.target = '_blank';
+    async function downloadDoc(filePath, fileName) {
+      const { data, error } = await client.storage.from('documents').createSignedUrl(filePath,60);
+      if (error) { alert('Download error: '+error.message); return; }
+      const a=document.createElement('a'); a.href=data.signedUrl; a.download=fileName; a.target='_blank';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
     }
-
     async function deleteDoc(docId, filePath) {
       if (!confirm('Delete this document? This cannot be undone.')) return;
       await client.storage.from('documents').remove([filePath]);
-      await client.from('documents').delete().eq('id', docId);
+      await client.from('documents').delete().eq('id',docId);
       await loadDocuments();
     }
-
-    function filterByCase() { caseFilter = document.getElementById('case-filter').value; renderDocs(); }
-    function setTypeFilter(type, btn) {
-      typeFilter = type;
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderDocs();
+    function filterByCase() { caseFilter=document.getElementById('case-filter').value; renderDocs(); }
+    function setTypeFilter(type,btn) {
+      typeFilter=type;
+      document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active'); renderDocs();
     }
-
     function getFileType(name) {
-      const ext = name?.split('.').pop()?.toLowerCase();
-      if (ext === 'pdf') return 'pdf';
+      const ext=name?.split('.').pop()?.toLowerCase();
+      if (ext==='pdf') return 'pdf';
       if (['doc','docx'].includes(ext)) return 'word';
       if (['jpg','jpeg','png','gif','webp'].includes(ext)) return 'image';
       return 'other';
     }
-    function getFileIcon(name) {
-      const t = getFileType(name);
-      return t === 'pdf' ? '📄' : t === 'word' ? '📝' : t === 'image' ? '🖼' : '📎';
-    }
+    function getFileIcon(name) { const t=getFileType(name); return t==='pdf'?'📄':t==='word'?'📝':t==='image'?'🖼':'📎'; }
     function formatSize(b) {
       if (!b) return '—';
-      if (b < 1024) return b + ' B';
-      if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
-      return (b/1048576).toFixed(1) + ' MB';
+      if (b<1024) return b+' B';
+      if (b<1048576) return (b/1024).toFixed(1)+' KB';
+      return (b/1048576).toFixed(1)+' MB';
     }
-    function showUploadMsg(text, type) {
-      const el = document.getElementById('upload-msg');
-      el.textContent = text; el.style.display = 'block';
-      el.style.background = type === 'error' ? '#FDEDED' : '#EDFAF3';
-      el.style.color = type === 'error' ? '#8B1A1A' : '#1D6B3E';
-      el.style.border = `1px solid ${type === 'error' ? 'rgba(139,26,26,0.2)' : 'rgba(29,107,62,0.2)'}`;
+    function showUploadMsg(text,type) {
+      const el=document.getElementById('upload-msg');
+      el.textContent=text; el.style.display='block';
+      el.style.background=type==='error'?'#FDEDED':'#EDFAF3';
+      el.style.color=type==='error'?'#8B1A1A':'#1D6B3E';
+      el.style.border=`1px solid ${type==='error'?'rgba(139,26,26,0.2)':'rgba(29,107,62,0.2)'}`;
     }
 
     init();
