@@ -331,7 +331,6 @@
       document.getElementById('analysis-content').style.display  = 'none';
       document.getElementById('analysis-error').style.display    = 'none';
 
-      // Animate progress
       let progress = 0;
       clearInterval(aiProgressTimer);
       aiProgressTimer = setInterval(() => {
@@ -340,9 +339,18 @@
       }, 400);
 
       try {
-        // Get fresh session token
-        const { data: { session } } = await client.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
+        // Force refresh session to get a fresh token
+        const { data: refreshData, error: refreshError } = await client.auth.refreshSession();
+
+        // Fall back to getSession if refresh fails
+        let accessToken;
+        if (refreshError || !refreshData?.session) {
+          const { data: { session } } = await client.auth.getSession();
+          if (!session) throw new Error('Not authenticated. Please log in again.');
+          accessToken = session.access_token;
+        } else {
+          accessToken = refreshData.session.access_token;
+        }
 
         const response = await fetch(
           `${SUPABASE_URL}/functions/v1/analyze-document`,
@@ -350,7 +358,7 @@
             method: 'POST',
             headers: {
               'Content-Type':  'application/json',
-              'Authorization': `Bearer ${session.access_token}`,
+              'Authorization': `Bearer ${accessToken}`,
               'apikey':        SUPABASE_ANON_KEY,
             },
             body: JSON.stringify({ document_id: docId }),
@@ -360,7 +368,13 @@
         clearInterval(aiProgressTimer);
         document.getElementById('ai-progress').style.width = '100%';
 
-        const result = await response.json();
+        // Try to parse response
+        let result;
+        try {
+          result = await response.json();
+        } catch {
+          throw new Error(`Server returned status ${response.status}`);
+        }
 
         if (!response.ok || result.error) {
           throw new Error(result.error || `HTTP ${response.status}`);
@@ -388,32 +402,27 @@
       document.getElementById('analysis-summary').textContent    = analysis.summary || 'No summary available.';
       document.getElementById('analysis-doc-type').textContent   = analysis.document_type || 'Legal Document';
 
-      // Sentiment
       const sentiment  = analysis.sentiment || 'neutral';
       const sentBadge  = document.getElementById('analysis-sentiment-badge');
       sentBadge.textContent = sentiment.charAt(0).toUpperCase() + sentiment.slice(1);
       sentBadge.className   = `sentiment-badge sentiment-${sentiment}`;
 
-      // Risk level
       const riskLevel  = analysis.risk_level || 'low';
       const riskLabels = { critical:'🔴 Critical', high:'🟠 High', medium:'🟡 Medium', low:'🟢 Low' };
       const riskBadge  = document.getElementById('analysis-risk-badge');
       riskBadge.textContent = riskLabels[riskLevel] || '🟢 Low';
       riskBadge.className   = `risk-level-badge risk-${riskLevel}`;
 
-      // Key points
       const kp = Array.isArray(analysis.key_points) ? analysis.key_points : JSON.parse(analysis.key_points||'[]');
       const kpSection = document.getElementById('key-points-section');
       if (kp.length) { document.getElementById('analysis-key-points').innerHTML = kp.map(p=>`<li>${p}</li>`).join(''); kpSection.style.display='block'; }
       else kpSection.style.display='none';
 
-      // Risk flags
       const rf = Array.isArray(analysis.risk_flags) ? analysis.risk_flags : JSON.parse(analysis.risk_flags||'[]');
       const rfSection = document.getElementById('risk-flags-section');
       if (rf.length) { document.getElementById('analysis-risk-flags').innerHTML = rf.map(r=>`<li>${r}</li>`).join(''); rfSection.style.display='block'; }
       else rfSection.style.display='none';
 
-      // Action items
       const ai = Array.isArray(analysis.action_items) ? analysis.action_items : JSON.parse(analysis.action_items||'[]');
       const aiSection = document.getElementById('action-items-section');
       if (ai.length) { document.getElementById('analysis-action-items').innerHTML = ai.map(a=>`<li>${a}</li>`).join(''); aiSection.style.display='block'; }
@@ -524,3 +533,4 @@
   </script>
 </body>
 </html>
+
