@@ -12,11 +12,21 @@
     .filter-btn.active { background:var(--color-accent); color:#fff; border-color:var(--color-accent); }
     .case-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:12px; padding:20px 24px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; transition:box-shadow 0.15s, border-color 0.15s; cursor:pointer; }
     .case-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.08); border-color:var(--color-border-dark); }
+    .case-card.risk-critical { border-left:4px solid #E24B4A; }
+    .case-card.risk-high     { border-left:4px solid #EF9F27; }
+    .case-card.risk-medium   { border-left:4px solid #F2C94C; }
+    .case-card.risk-low      { border-left:4px solid #1D9E75; }
     .case-card-left { flex:1; }
     .case-card-title { font-weight:500; font-size:1rem; margin-bottom:6px; color:var(--color-text-primary); }
     .case-card-meta { font-size:0.82rem; color:var(--color-text-muted); display:flex; gap:16px; flex-wrap:wrap; }
     .case-card-right { display:flex; align-items:center; gap:8px; flex-shrink:0; margin-left:16px; flex-wrap:wrap; justify-content:flex-end; }
     .practice-badge { padding:3px 10px; border-radius:99px; font-size:0.72rem; font-weight:500; background:var(--color-accent-light); color:var(--color-accent); white-space:nowrap; }
+    .risk-badge { padding:3px 10px; border-radius:99px; font-size:0.72rem; font-weight:600; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
+    .risk-badge.critical { background:#FDEDED; color:#8B1A1A; }
+    .risk-badge.high     { background:#FFF0DB; color:#7A4F00; }
+    .risk-badge.medium   { background:#FFFBE6; color:#7A6000; }
+    .risk-badge.low      { background:#EDFAF3; color:#1D6B3E; }
+    .risk-badge.unassessed { background:#F0EDE8; color:#6B6760; }
     .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; align-items:center; justify-content:center; padding:20px; }
     .modal-overlay.open { display:flex; }
     .modal { background:var(--color-surface); border-radius:12px; padding:32px; width:100%; max-width:540px; box-shadow:0 16px 48px rgba(0,0,0,0.2); max-height:90vh; overflow-y:auto; }
@@ -26,13 +36,14 @@
     .detail-label { font-weight:500; min-width:120px; color:var(--color-text-secondary); flex-shrink:0; }
     .empty-state { text-align:center; padding:60px 20px; color:var(--color-text-muted); }
     .empty-state h3 { margin-bottom:8px; color:var(--color-text-secondary); font-size:1.1rem; }
-    .search-input { padding:9px 14px; border:1px solid var(--color-border-dark); border-radius:8px; font-family:inherit; font-size:0.9rem; width:220px; transition:border-color 0.15s; }
+    .search-input { padding:9px 14px; border:1px solid var(--color-border-dark); border-radius:8px; font-family:inherit; font-size:0.9rem; width:220px; }
     .search-input:focus { outline:none; border-color:var(--color-accent); box-shadow:0 0 0 3px rgba(28,61,90,0.1); }
-    .top-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .section-label { font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--color-text-muted); margin-bottom:8px; }
+    textarea { width:100%; padding:10px 14px; border:1px solid var(--color-border-dark); border-radius:8px; font-family:inherit; font-size:1rem; resize:vertical; }
+    textarea:focus { outline:none; border-color:var(--color-accent); }
+    .risk-summary { display:flex; gap:8px; margin-bottom:24px; flex-wrap:wrap; }
+    .risk-summary-item { padding:8px 16px; border-radius:8px; font-size:0.82rem; font-weight:500; display:flex; align-items:center; gap:6px; }
     .specialist-hint { font-size:0.78rem; color:var(--color-accent); margin-top:4px; display:none; }
-    textarea { width:100%; padding:10px 14px; border:1px solid var(--color-border-dark); border-radius:8px; font-family:inherit; font-size:1rem; resize:vertical; transition:border-color 0.15s; }
-    textarea:focus { outline:none; border-color:var(--color-accent); box-shadow:0 0 0 3px rgba(28,61,90,0.1); }
   </style>
 </head>
 <body class="auth-loading">
@@ -45,11 +56,14 @@
           <h1>Cases</h1>
           <p id="cases-count" style="margin-top:4px;font-size:0.875rem;">Loading...</p>
         </div>
-        <div class="top-controls">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input type="text" class="search-input" id="search-input" placeholder="Search cases..." oninput="renderCases()" />
           <button id="new-case-btn" class="btn btn-primary" style="display:none;" onclick="openCreateModal()">+ New Case</button>
         </div>
       </div>
+
+      <!-- Risk summary row -->
+      <div class="risk-summary" id="risk-summary"></div>
 
       <!-- Status filter -->
       <div class="section-label">Filter by status</div>
@@ -58,6 +72,17 @@
         <button class="filter-btn" onclick="setStatusFilter('active', this)">Active</button>
         <button class="filter-btn" onclick="setStatusFilter('pending', this)">Pending</button>
         <button class="filter-btn" onclick="setStatusFilter('closed', this)">Closed</button>
+      </div>
+
+      <!-- Risk filter -->
+      <div class="section-label">Filter by risk level</div>
+      <div class="filter-bar" id="risk-filters">
+        <button class="filter-btn active" onclick="setRiskFilter('all', this)">All risks</button>
+        <button class="filter-btn" onclick="setRiskFilter('critical', this)" style="color:#8B1A1A;border-color:#E24B4A;">🔴 Critical</button>
+        <button class="filter-btn" onclick="setRiskFilter('high', this)" style="color:#7A4F00;border-color:#EF9F27;">🟠 High</button>
+        <button class="filter-btn" onclick="setRiskFilter('medium', this)" style="color:#7A6000;border-color:#F2C94C;">🟡 Medium</button>
+        <button class="filter-btn" onclick="setRiskFilter('low', this)" style="color:#1D6B3E;border-color:#1D9E75;">🟢 Low</button>
+        <button class="filter-btn" onclick="setRiskFilter('unassessed', this)">⚪ Unassessed</button>
       </div>
 
       <!-- Practice area filter -->
@@ -114,9 +139,7 @@
         </div>
         <div class="form-group">
           <label>Assign Client</label>
-          <select id="new-client">
-            <option value="">Select client...</option>
-          </select>
+          <select id="new-client"><option value="">Select client...</option></select>
         </div>
         <div class="form-group">
           <label>Status</label>
@@ -156,16 +179,12 @@
       </div>
       <div class="form-group">
         <label>Assign Attorney</label>
-        <select id="edit-attorney">
-          <option value="">No attorney</option>
-        </select>
+        <select id="edit-attorney"></select>
         <div class="specialist-hint" id="edit-specialist-hint">⭐ Showing specialists for selected practice area</div>
       </div>
       <div class="form-group">
         <label>Assign Client</label>
-        <select id="edit-client">
-          <option value="">No client</option>
-        </select>
+        <select id="edit-client"></select>
       </div>
       <div class="form-group">
         <label>Status</label>
@@ -174,6 +193,16 @@
           <option value="pending">Pending</option>
           <option value="closed">Closed</option>
           <option value="archived">Archived</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Risk Level (manual override)</label>
+        <select id="edit-risk">
+          <option value="unassessed">⚪ Unassessed</option>
+          <option value="low">🟢 Low</option>
+          <option value="medium">🟡 Medium</option>
+          <option value="high">🟠 High</option>
+          <option value="critical">🔴 Critical</option>
         </select>
       </div>
       <div id="edit-msg" style="display:none;padding:10px 14px;border-radius:8px;font-size:0.9rem;margin-bottom:16px;"></div>
@@ -196,22 +225,31 @@
     let practiceAreas   = [];
     let attorneys       = [];
     let clients         = [];
-    let userPracticeMap = {}; // attorneyId → [practiceAreaId, ...]
+    let userPracticeMap = {};
     let statusFilter    = 'all';
     let practiceFilter  = 'all';
+    let riskFilter      = 'all';
     let currentDetail   = null;
+
+    const RISK_CONFIG = {
+      critical:   { label:'🔴 Critical',   class:'critical' },
+      high:       { label:'🟠 High',       class:'high' },
+      medium:     { label:'🟡 Medium',     class:'medium' },
+      low:        { label:'🟢 Low',        class:'low' },
+      unassessed: { label:'⚪ Unassessed', class:'unassessed' },
+    };
 
     async function signOut() {
       await client.auth.signOut();
-      window.location.replace('/index.html');
+      window.location.replace('/lexcore2/index.html');
     }
 
     async function init() {
       const { data: { session } } = await client.auth.getSession();
-      if (!session) { window.location.replace('/index.html'); return; }
+      if (!session) { window.location.replace('/lexcore2/index.html'); return; }
 
       const { data: profile } = await client.from('profiles').select('*').eq('id', session.user.id).single();
-      if (!profile) { window.location.replace('/index.html'); return; }
+      if (!profile) { window.location.replace('/lexcore2/index.html'); return; }
 
       currentProfile = profile;
       document.body.classList.remove('auth-loading');
@@ -221,19 +259,14 @@
       }
 
       buildSidebar(profile);
-
-      await Promise.all([
-        loadPracticeAreas(),
-        loadCases(),
-        loadPeople(),
-      ]);
+      await Promise.all([loadPracticeAreas(), loadCases(), loadPeople()]);
     }
 
     function buildSidebar(profile) {
       const navMap = {
-        admin:    [['dashboard-admin.html','⊞ Dashboard'],['cases.html','⊟ Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
-        attorney: [['dashboard-attorney.html','⊞ Dashboard'],['cases.html','⊟ My Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages'],['upload.html','↑ Upload']],
-        staff:    [['dashboard-staff.html','⊞ Dashboard'],['cases.html','⊟ Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages'],['upload.html','↑ Upload']],
+        admin:    [['dashboard-admin.html','⊞ Dashboard'],['cases.html','⊟ Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages'],['practice-areas.html','⊛ Practice Areas']],
+        attorney: [['dashboard-attorney.html','⊞ Dashboard'],['cases.html','⊟ My Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
+        staff:    [['dashboard-staff.html','⊞ Dashboard'],['cases.html','⊟ Cases'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
         client:   [['dashboard-client.html','⊞ Dashboard'],['cases.html','⊟ My Case'],['documents.html','⊡ Documents'],['messages.html','◷ Messages']],
       };
       const links = (navMap[profile.role] || []).map(([href, label]) =>
@@ -253,21 +286,15 @@
 
     async function loadPracticeAreas() {
       const { data } = await client.from('practice_areas')
-        .select('*')
-        .eq('firm_id', currentProfile.firm_id)
-        .order('name');
+        .select('*').eq('firm_id', currentProfile.firm_id).order('name');
       practiceAreas = data || [];
 
-      // Build practice area filter pills
       const bar = document.getElementById('practice-filters');
-      const pills = practiceAreas.map(pa =>
-        `<button class="filter-btn" onclick="setPracticeFilter('${pa.id}', this)">${pa.name}</button>`
-      ).join('');
-      bar.innerHTML = `<button class="filter-btn active" onclick="setPracticeFilter('all', this)">All areas</button>` + pills;
+      bar.innerHTML = `<button class="filter-btn active" onclick="setPracticeFilter('all', this)">All areas</button>` +
+        practiceAreas.map(pa => `<button class="filter-btn" onclick="setPracticeFilter('${pa.id}', this)">${pa.name}</button>`).join('');
 
-      // Populate practice area dropdowns
       const opts = practiceAreas.map(pa => `<option value="${pa.id}">${pa.name}</option>`).join('');
-      document.getElementById('new-practice').innerHTML = '<option value="">Select practice area...</option>' + opts;
+      document.getElementById('new-practice').innerHTML  = '<option value="">Select practice area...</option>' + opts;
       document.getElementById('edit-practice').innerHTML = '<option value="">No practice area</option>' + opts;
     }
 
@@ -276,145 +303,122 @@
         .select('*, attorney:profiles!cases_attorney_id_fkey(id,full_name), client:profiles!cases_client_id_fkey(id,full_name), practice_area:practice_areas(id,name)')
         .order('created_at', { ascending: false });
 
-      if (currentProfile.role === 'attorney') {
-        query = query.eq('attorney_id', currentProfile.id);
-      } else if (currentProfile.role === 'client') {
-        query = query.eq('client_id', currentProfile.id);
-      } else {
-        query = query.eq('firm_id', currentProfile.firm_id);
-      }
+      if (currentProfile.role === 'attorney')     query = query.eq('attorney_id', currentProfile.id);
+      else if (currentProfile.role === 'client')  query = query.eq('client_id', currentProfile.id);
+      else                                         query = query.eq('firm_id', currentProfile.firm_id);
 
       const { data } = await query;
       allCases = data || [];
+      renderRiskSummary();
       renderCases();
     }
 
     async function loadPeople() {
       if (!['admin', 'attorney'].includes(currentProfile.role)) return;
-
       const firmId = currentProfile.firm_id;
 
-      // Load attorneys
-      const { data: atts } = await client.from('profiles')
-        .select('id, full_name')
-        .eq('firm_id', firmId)
-        .eq('role', 'attorney');
+      const { data: atts } = await client.from('profiles').select('id,full_name').eq('firm_id', firmId).eq('role', 'attorney');
+      const { data: cls  } = await client.from('profiles').select('id,full_name').eq('firm_id', firmId).eq('role', 'client');
       attorneys = atts || [];
+      clients   = cls  || [];
 
-      // Load clients
-      const { data: cls } = await client.from('profiles')
-        .select('id, full_name')
-        .eq('firm_id', firmId)
-        .eq('role', 'client');
-      clients = cls || [];
-
-      // Load user practice area links
-      const { data: upa } = await client.from('user_practice_areas')
-        .select('user_id, practice_area_id');
-
+      const { data: upa } = await client.from('user_practice_areas').select('user_id,practice_area_id');
       userPracticeMap = {};
       (upa || []).forEach(row => {
         if (!userPracticeMap[row.user_id]) userPracticeMap[row.user_id] = [];
         userPracticeMap[row.user_id].push(row.practice_area_id);
       });
 
-      // Populate client dropdowns
       const clOpts = clients.map(c => `<option value="${c.id}">${c.full_name}</option>`).join('');
-      document.getElementById('new-client').innerHTML = '<option value="">No client</option>' + clOpts;
-      document.getElementById('edit-client').innerHTML = '<option value="">No client</option>' + clOpts;
-
-      // Populate attorney dropdowns with all attorneys initially
+      ['new-client','edit-client'].forEach(id => {
+        document.getElementById(id).innerHTML = '<option value="">No client</option>' + clOpts;
+      });
       populateAttorneySelect('new-attorney', attorneys);
       populateAttorneySelect('edit-attorney', attorneys);
     }
 
     function populateAttorneySelect(selectId, list, specialistIds = []) {
-      const select = document.getElementById(selectId);
+      const select  = document.getElementById(selectId);
       const current = select.value;
-
-      if (specialistIds.length > 0) {
+      if (specialistIds.length) {
         const specialists = list.filter(a => specialistIds.includes(a.id));
         const others      = list.filter(a => !specialistIds.includes(a.id));
         let html = '<option value="">No attorney</option>';
-        if (specialists.length) {
-          html += `<optgroup label="⭐ Specialists">` + specialists.map(a => `<option value="${a.id}">${a.full_name}</option>`).join('') + '</optgroup>';
-        }
-        if (others.length) {
-          html += `<optgroup label="Other attorneys">` + others.map(a => `<option value="${a.id}">${a.full_name}</option>`).join('') + '</optgroup>';
-        }
+        if (specialists.length) html += `<optgroup label="⭐ Specialists">` + specialists.map(a => `<option value="${a.id}">${a.full_name}</option>`).join('') + '</optgroup>';
+        if (others.length)      html += `<optgroup label="Other attorneys">` + others.map(a => `<option value="${a.id}">${a.full_name}</option>`).join('') + '</optgroup>';
         select.innerHTML = html;
       } else {
         select.innerHTML = '<option value="">No attorney</option>' + list.map(a => `<option value="${a.id}">${a.full_name}</option>`).join('');
       }
-
       if (current) select.value = current;
     }
 
     function filterAttorneysByPractice(prefix) {
       const practiceId = document.getElementById(prefix + '-practice').value;
       const hintEl     = document.getElementById(prefix + '-specialist-hint');
-
-      if (!practiceId) {
-        populateAttorneySelect(prefix + '-attorney', attorneys);
-        hintEl.style.display = 'none';
-        return;
-      }
-
-      // Find attorneys who specialise in this practice area
-      const specialistIds = Object.entries(userPracticeMap)
-        .filter(([, areas]) => areas.includes(practiceId))
-        .map(([userId]) => userId);
-
+      if (!practiceId) { populateAttorneySelect(prefix + '-attorney', attorneys); hintEl.style.display = 'none'; return; }
+      const specialistIds = Object.entries(userPracticeMap).filter(([,areas]) => areas.includes(practiceId)).map(([id]) => id);
       populateAttorneySelect(prefix + '-attorney', attorneys, specialistIds);
       hintEl.style.display = specialistIds.length ? 'block' : 'none';
+    }
+
+    function renderRiskSummary() {
+      const counts = { critical:0, high:0, medium:0, low:0, unassessed:0 };
+      allCases.forEach(c => { const r = c.risk_level || 'unassessed'; if (counts[r] !== undefined) counts[r]++; });
+
+      const colors = { critical:'#FDEDED', high:'#FFF0DB', medium:'#FFFBE6', low:'#EDFAF3', unassessed:'#F0EDE8' };
+      const textColors = { critical:'#8B1A1A', high:'#7A4F00', medium:'#7A6000', low:'#1D6B3E', unassessed:'#6B6760' };
+
+      document.getElementById('risk-summary').innerHTML = Object.entries(counts)
+        .filter(([,count]) => count > 0)
+        .map(([risk, count]) => `
+          <div class="risk-summary-item" style="background:${colors[risk]};color:${textColors[risk]};" onclick="setRiskFilterById('${risk}')">
+            ${RISK_CONFIG[risk].label} <strong>${count}</strong>
+          </div>`).join('');
     }
 
     function renderCases() {
       const search = document.getElementById('search-input').value.toLowerCase();
       let filtered = allCases;
 
-      if (statusFilter !== 'all') {
-        filtered = filtered.filter(c => c.status === statusFilter);
-      }
-      if (practiceFilter !== 'all') {
-        filtered = filtered.filter(c => c.practice_area_id === practiceFilter);
-      }
-      if (search) {
-        filtered = filtered.filter(c =>
-          c.title.toLowerCase().includes(search) ||
-          c.attorney?.full_name?.toLowerCase().includes(search) ||
-          c.client?.full_name?.toLowerCase().includes(search) ||
-          c.practice_area?.name?.toLowerCase().includes(search)
-        );
-      }
+      if (statusFilter   !== 'all') filtered = filtered.filter(c => c.status === statusFilter);
+      if (practiceFilter !== 'all') filtered = filtered.filter(c => c.practice_area_id === practiceFilter);
+      if (riskFilter     !== 'all') filtered = filtered.filter(c => (c.risk_level || 'unassessed') === riskFilter);
+      if (search) filtered = filtered.filter(c =>
+        c.title.toLowerCase().includes(search) ||
+        c.attorney?.full_name?.toLowerCase().includes(search) ||
+        c.client?.full_name?.toLowerCase().includes(search) ||
+        c.practice_area?.name?.toLowerCase().includes(search)
+      );
 
       document.getElementById('cases-count').textContent = `${filtered.length} case${filtered.length !== 1 ? 's' : ''}`;
 
       const list = document.getElementById('cases-list');
       if (!filtered.length) {
-        list.innerHTML = `
-          <div class="empty-state">
-            <h3>No cases found</h3>
-            <p>Try a different filter or search term.</p>
-          </div>`;
+        list.innerHTML = `<div class="empty-state"><h3>No cases found</h3><p>Try a different filter or search term.</p></div>`;
         return;
       }
 
-      list.innerHTML = filtered.map(c => `
-        <div class="case-card" onclick="openDetail('${c.id}')">
-          <div class="case-card-left">
-            <div class="case-card-title">${c.title}</div>
-            <div class="case-card-meta">
-              <span>⚖ ${c.attorney?.full_name || 'No attorney'}</span>
-              <span>👤 ${c.client?.full_name || 'No client'}</span>
-              <span>📅 ${new Date(c.created_at).toLocaleDateString()}</span>
+      list.innerHTML = filtered.map(c => {
+        const risk   = c.risk_level || 'unassessed';
+        const riskCfg = RISK_CONFIG[risk];
+        return `
+          <div class="case-card risk-${risk}" onclick="openDetail('${c.id}')">
+            <div class="case-card-left">
+              <div class="case-card-title">${c.title}</div>
+              <div class="case-card-meta">
+                <span>⚖ ${c.attorney?.full_name || 'No attorney'}</span>
+                <span>👤 ${c.client?.full_name || 'No client'}</span>
+                <span>📅 ${new Date(c.created_at).toLocaleDateString()}</span>
+              </div>
             </div>
-          </div>
-          <div class="case-card-right">
-            ${c.practice_area ? `<span class="practice-badge">${c.practice_area.name}</span>` : ''}
-            <span class="badge badge-${c.status === 'active' ? 'success' : c.status === 'pending' ? 'warning' : 'error'}">${c.status}</span>
-          </div>
-        </div>`).join('');
+            <div class="case-card-right">
+              ${c.practice_area ? `<span class="practice-badge">${c.practice_area.name}</span>` : ''}
+              <span class="risk-badge ${riskCfg.class}">${riskCfg.label}</span>
+              <span class="badge badge-${c.status === 'active' ? 'success' : c.status === 'pending' ? 'warning' : 'error'}">${c.status}</span>
+            </div>
+          </div>`;
+      }).join('');
     }
 
     function setStatusFilter(filter, btn) {
@@ -431,43 +435,36 @@
       renderCases();
     }
 
+    function setRiskFilter(filter, btn) {
+      riskFilter = filter;
+      document.querySelectorAll('#risk-filters .filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderCases();
+    }
+
+    function setRiskFilterById(risk) {
+      riskFilter = risk;
+      document.querySelectorAll('#risk-filters .filter-btn').forEach(b => b.classList.remove('active'));
+      renderCases();
+    }
+
     function openDetail(id) {
       const c = allCases.find(x => x.id === id);
       if (!c) return;
       currentDetail = c;
+      const risk    = c.risk_level || 'unassessed';
+      const riskCfg = RISK_CONFIG[risk];
 
       document.getElementById('detail-title').textContent = c.title;
       document.getElementById('detail-body').innerHTML = `
-        <div class="detail-row">
-          <span class="detail-label">Status</span>
-          <span class="badge badge-${c.status === 'active' ? 'success' : c.status === 'pending' ? 'warning' : 'error'}">${c.status}</span>
-        </div>
-        ${c.practice_area ? `
-        <div class="detail-row">
-          <span class="detail-label">Practice area</span>
-          <span class="practice-badge">${c.practice_area.name}</span>
-        </div>` : ''}
-        <div class="detail-row">
-          <span class="detail-label">Attorney</span>
-          <span>${c.attorney?.full_name || '—'}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Client</span>
-          <span>${c.client?.full_name || '—'}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Created</span>
-          <span>${new Date(c.created_at).toLocaleDateString()}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">Last updated</span>
-          <span>${new Date(c.updated_at || c.created_at).toLocaleDateString()}</span>
-        </div>
-        ${c.description ? `
-        <div class="detail-row">
-          <span class="detail-label">Description</span>
-          <span>${c.description}</span>
-        </div>` : ''}
+        <div class="detail-row"><span class="detail-label">Status</span><span class="badge badge-${c.status === 'active' ? 'success' : c.status === 'pending' ? 'warning' : 'error'}">${c.status}</span></div>
+        <div class="detail-row"><span class="detail-label">Risk level</span><span class="risk-badge ${riskCfg.class}">${riskCfg.label}</span></div>
+        ${c.practice_area ? `<div class="detail-row"><span class="detail-label">Practice area</span><span class="practice-badge">${c.practice_area.name}</span></div>` : ''}
+        <div class="detail-row"><span class="detail-label">Attorney</span><span>${c.attorney?.full_name || '—'}</span></div>
+        <div class="detail-row"><span class="detail-label">Client</span><span>${c.client?.full_name || '—'}</span></div>
+        <div class="detail-row"><span class="detail-label">Created</span><span>${new Date(c.created_at).toLocaleDateString()}</span></div>
+        <div class="detail-row"><span class="detail-label">Last updated</span><span>${new Date(c.updated_at || c.created_at).toLocaleDateString()}</span></div>
+        ${c.description ? `<div class="detail-row"><span class="detail-label">Description</span><span>${c.description}</span></div>` : ''}
       `;
 
       const editBtn = document.getElementById('edit-btn');
@@ -478,13 +475,14 @@
     function openEditFromDetail() {
       closeModal('detail-modal');
       const c = currentDetail;
-      document.getElementById('edit-id').value         = c.id;
-      document.getElementById('edit-title').value      = c.title;
-      document.getElementById('edit-desc').value       = c.description || '';
-      document.getElementById('edit-status').value     = c.status;
-      document.getElementById('edit-practice').value   = c.practice_area_id || '';
-      document.getElementById('edit-attorney').value   = c.attorney_id || '';
-      document.getElementById('edit-client').value     = c.client_id || '';
+      document.getElementById('edit-id').value       = c.id;
+      document.getElementById('edit-title').value    = c.title;
+      document.getElementById('edit-desc').value     = c.description || '';
+      document.getElementById('edit-status').value   = c.status;
+      document.getElementById('edit-practice').value = c.practice_area_id || '';
+      document.getElementById('edit-attorney').value = c.attorney_id || '';
+      document.getElementById('edit-client').value   = c.client_id || '';
+      document.getElementById('edit-risk').value     = c.risk_level || 'unassessed';
       filterAttorneysByPractice('edit');
       document.getElementById('edit-modal').classList.add('open');
     }
@@ -492,35 +490,28 @@
     async function saveEdit() {
       const id  = document.getElementById('edit-id').value;
       const msg = document.getElementById('edit-msg');
-
       const { error } = await client.from('cases').update({
-        title:           document.getElementById('edit-title').value.trim(),
-        description:     document.getElementById('edit-desc').value.trim(),
-        status:          document.getElementById('edit-status').value,
+        title:            document.getElementById('edit-title').value.trim(),
+        description:      document.getElementById('edit-desc').value.trim(),
+        status:           document.getElementById('edit-status').value,
         practice_area_id: document.getElementById('edit-practice').value || null,
-        attorney_id:     document.getElementById('edit-attorney').value || null,
-        client_id:       document.getElementById('edit-client').value || null,
+        attorney_id:      document.getElementById('edit-attorney').value || null,
+        client_id:        document.getElementById('edit-client').value || null,
+        risk_level:       document.getElementById('edit-risk').value,
       }).eq('id', id);
-
       if (error) { showMsg(msg, 'Error: ' + error.message, 'error'); return; }
       closeModal('edit-modal');
       await loadCases();
     }
 
-    function openCreateModal() {
-      document.getElementById('create-modal').classList.add('open');
-    }
-
-    function closeModal(id) {
-      document.getElementById(id).classList.remove('open');
-    }
+    function openCreateModal() { document.getElementById('create-modal').classList.add('open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
     document.getElementById('create-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const msg   = document.getElementById('create-msg');
       const title = document.getElementById('new-title').value.trim();
       if (!title) { showMsg(msg, 'Please enter a case title.', 'error'); return; }
-
       const { error } = await client.from('cases').insert({
         firm_id:          currentProfile.firm_id,
         title,
@@ -529,10 +520,10 @@
         attorney_id:      document.getElementById('new-attorney').value || null,
         client_id:        document.getElementById('new-client').value || null,
         status:           document.getElementById('new-status').value,
+        risk_level:       'unassessed',
       });
-
       if (error) { showMsg(msg, 'Error: ' + error.message, 'error'); return; }
-      showMsg(msg, 'Case created successfully!', 'success');
+      showMsg(msg, 'Case created!', 'success');
       document.getElementById('create-form').reset();
       document.getElementById('new-specialist-hint').style.display = 'none';
       setTimeout(() => closeModal('create-modal'), 800);
@@ -540,8 +531,8 @@
     });
 
     function showMsg(el, text, type) {
-      el.textContent    = text;
-      el.style.display  = 'block';
+      el.textContent      = text;
+      el.style.display    = 'block';
       el.style.background = type === 'error' ? '#FDEDED' : '#EDFAF3';
       el.style.color      = type === 'error' ? '#8B1A1A' : '#1D6B3E';
       el.style.border     = `1px solid ${type === 'error' ? 'rgba(139,26,26,0.2)' : 'rgba(29,107,62,0.2)'}`;
@@ -551,3 +542,4 @@
   </script>
 </body>
 </html>
+
