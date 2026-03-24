@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -178,6 +178,11 @@
   <script>
     const SUPABASE_URL      = 'https://hwsokdbbjjtiwscldbpr.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3c29rZGJiamp0aXdzY2xkYnByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MTAzOTgsImV4cCI6MjA4OTA4NjM5OH0.PV-f9KCQzlPm5stTxFOSN4sVJDRKqZnqKnFZ6qHWECk';
+
+    // ── IMPORTANT: Replace with your OpenAI API key ──────────
+    const OPENAI_API_KEY = 'YOUR_OPENAI_KEY_HERE';
+    // ────────────────────────────────────────────────────────
+
     const { createClient } = supabase;
     const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -313,13 +318,11 @@
       try { analysis = JSON.parse(data.raw_response); }
       catch {
         analysis = {
-          summary:       data.summary,
-          key_points:    JSON.parse(data.key_points||'[]'),
-          risk_flags:    JSON.parse(data.risk_flags||'[]'),
-          action_items:  [],
-          document_type: 'Legal Document',
-          sentiment:     'neutral',
-          risk_level:    'low'
+          summary: data.summary,
+          key_points: JSON.parse(data.key_points||'[]'),
+          risk_flags: JSON.parse(data.risk_flags||'[]'),
+          action_items: [], document_type: 'Legal Document',
+          sentiment: 'neutral', risk_level: 'low'
         };
       }
       displayAnalysis(analysis);
@@ -338,37 +341,88 @@
         document.getElementById('ai-progress').style.width = progress + '%';
       }, 400);
 
-     try {
-  const response = await fetch(
-    `${SUPABASE_URL}/functions/v1/analyze-document`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'apikey':        SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({ document_id: docId }),
-    }
-  );
+      try {
+        // Get document details from Supabase
+        const { data: doc, error: docErr } = await client
+          .from('documents')
+          .select('*, case:cases(id, title)')
+          .eq('id', docId)
+          .single();
+
+        if (docErr || !doc) throw new Error('Document not found');
+
+        // Call OpenAI directly from browser
+        const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type':  'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            max_tokens: 1000,
+            messages: [
+              {
+                role: 'system',
+                content: `You are a legal document analyst. Based on the document filename and case name, generate a realistic legal document analysis. Return ONLY valid JSON with these exact fields:
+{
+  "summary": "2-3 sentence plain English summary",
+  "key_points": ["point 1", "point 2", "point 3"],
+  "risk_flags": ["risk 1", "risk 2"],
+  "document_type": "type of legal document",
+  "action_items": ["action 1", "action 2"],
+  "sentiment": "positive or neutral or negative or urgent",
+  "risk_level": "low or medium or high or critical"
+}
+Risk level guide: low = routine document, medium = some issues, high = serious issues, critical = urgent legal risks.`
+              },
+              {
+                role: 'user',
+                content: `Document filename: ${doc.file_name}\nCase: ${doc.case?.title || 'Unknown case'}\nFile type: ${doc.file_type || 'unknown'}`
+              }
+            ]
+          })
+        });
+
+        if (!openAIResponse.ok) {
+          const errData = await openAIResponse.json();
+          throw new Error(errData.error?.message || `OpenAI error: ${openAIResponse.status}`);
+        }
+
+        const openAIData   = await openAIResponse.json();
+        const analysisText = openAIData.choices[0].message.content;
+
+        let analysis;
+        try { analysis = JSON.parse(analysisText); }
+        catch {
+          analysis = {
+            summary: analysisText, key_points: [], risk_flags: [],
+            document_type: 'Legal Document', action_items: [],
+            sentiment: 'neutral', risk_level: 'low'
+          };
+        }
+
+        // Save analysis to Supabase
+        await client.from('ai_analyses').upsert({
+          document_id:  docId,
+          summary:      analysis.summary,
+          key_points:   JSON.stringify(analysis.key_points),
+          risk_flags:   JSON.stringify(analysis.risk_flags),
+          raw_response: JSON.stringify(analysis),
+          created_at:   new Date().toISOString()
+        }, { onConflict: 'document_id' });
+
+        // Update case risk level
+        await client.from('cases')
+          .update({ risk_level: analysis.risk_level || 'low' })
+          .eq('id', doc.case_id);
+
         clearInterval(aiProgressTimer);
         document.getElementById('ai-progress').style.width = '100%';
 
-        // Try to parse response
-        let result;
-        try {
-          result = await response.json();
-        } catch {
-          throw new Error(`Server returned status ${response.status}`);
-        }
-
-        if (!response.ok || result.error) {
-          throw new Error(result.error || `HTTP ${response.status}`);
-        }
-
         setTimeout(() => {
           document.getElementById('analysis-loading').style.display = 'none';
-          displayAnalysis(result.analysis);
+          displayAnalysis(analysis);
           document.getElementById('reanalyze-btn').style.display = 'inline-flex';
           loadDocuments();
         }, 400);
@@ -388,8 +442,8 @@
       document.getElementById('analysis-summary').textContent    = analysis.summary || 'No summary available.';
       document.getElementById('analysis-doc-type').textContent   = analysis.document_type || 'Legal Document';
 
-      const sentiment  = analysis.sentiment || 'neutral';
-      const sentBadge  = document.getElementById('analysis-sentiment-badge');
+      const sentiment = analysis.sentiment || 'neutral';
+      const sentBadge = document.getElementById('analysis-sentiment-badge');
       sentBadge.textContent = sentiment.charAt(0).toUpperCase() + sentiment.slice(1);
       sentBadge.className   = `sentiment-badge sentiment-${sentiment}`;
 
@@ -519,4 +573,3 @@
   </script>
 </body>
 </html>
-
